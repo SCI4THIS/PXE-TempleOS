@@ -2,6 +2,7 @@ services:
   dnsmasq:
     build: 
       context: ./dnsmasq
+      network: host
       args:
         PXE_SERVER_IP: ${PXE_SERVER_IP}
     container_name: pxe-dnsmasq
@@ -14,6 +15,7 @@ services:
   http:
     build:
       context: ./lighttpd
+      network: host
       args:
         PXE_SERVER_IP: ${PXE_SERVER_IP}
     container_name: pxe-lighttpd
