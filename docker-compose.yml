@@ -1,0 +1,22 @@
+services:
+  dnsmasq:
+    build: 
+      context: ./dnsmasq
+      args:
+        PXE_SERVER_IP: ${PXE_SERVER_IP}
+    container_name: pxe-dnsmasq
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./dnsmasq/tftp:/tftpboot
+
+  http:
+    build:
+      context: ./lighttpd
+      args:
+        PXE_SERVER_IP: ${PXE_SERVER_IP}
+    container_name: pxe-lighttpd
+    network_mode: host
+    volumes:
+      - ./lighttpd/www:/var/www/localhost/htdocs
