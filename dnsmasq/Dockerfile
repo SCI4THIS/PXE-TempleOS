@@ -34,8 +34,7 @@ EOF
 RUN install -Dm700 /dev/stdin /start.sh <<EOF
 #!/bin/sh
 echo "Copying files from staging to root"
-cp -rv ${STAGING_DIR}/* /
-cat /tftpboot/x86_64-efi/autoexec.ipxe
+cp -a ${STAGING_DIR}/* /
 echo "Starting dnsmasq server"
 exec dnsmasq -k -d
 EOF
