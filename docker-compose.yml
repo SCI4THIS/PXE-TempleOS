@@ -14,11 +14,11 @@ services:
 
   http:
     build:
-      context: ./lighttpd
+      context: ./nginx
       network: host
       args:
         PXE_SERVER_IP: ${PXE_SERVER_IP}
-    container_name: pxe-lighttpd
+    container_name: pxe-nginx
     network_mode: host
     volumes:
-      - ./lighttpd/www:/var/www/localhost/htdocs
+      - ./nginx/www:/var/www/localhost/htdocs
