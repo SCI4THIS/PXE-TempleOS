@@ -10,7 +10,7 @@ ARG PROXY_PASS_TTL=30d
 
 RUN mkdir -p /var/cache/nginx
 
-RUN install -m644 /dev/stdin ${STAGING_DIR}/etc/nginx/nginx.conf <<EOF
+RUN install -Dm644 /dev/stdin ${STAGING_DIR}/etc/nginx/nginx.conf <<EOF
 worker_processes 1;
 events {
   worker_connections 1024;
