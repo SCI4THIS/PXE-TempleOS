@@ -45,8 +45,19 @@ RUN install -Dm644 /dev/stdin ${STAGING_DIR}/var/www/htdocs/x86_64-efi/boot.ipxe
 #!ipxe
 menu Network Boot Menu
 item --key s shell iPXE shell
-choose --timeout ${MENU_TIMEOUT} --default shell target || goto shell
+item --key a alpine Alpine Linux
+choose --timeout ${MENU_TIMEOUT} --default alpine target || goto alpine
 goto \${target}
+
+:alpine
+echo Booting Alpine...
+kernel http://${PXE_SERVER_IP}/dl-cdn/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
+  modules=loop,squashfs quiet nomodeset \
+  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn/alpine/v3.23/main \
+  modloop=http://${PXE_SERVER_IP}/dl-cdn/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
+  ip=dhcp
+initrd http://${PXE_SERVER_IP}/dl-cdn/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
+boot
 
 :shell
 shell
@@ -56,7 +67,7 @@ RUN install -Dm700 /dev/stdin /start.sh <<EOF
 #!/bin/sh
 echo "Copying files from staging to root"
 cp -a ${STAGING_DIR}/* /
-echo "Staging NGINX server"
+echo "Starting NGINX server"
 exec nginx -g "daemon off;"
 EOF
 

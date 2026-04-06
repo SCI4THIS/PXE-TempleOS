@@ -21,4 +21,4 @@ services:
     container_name: pxe-nginx
     network_mode: host
     volumes:
-      - ./nginx/www:/var/www/localhost/htdocs
+      - ./nginx/www:/var/www/htdocs
