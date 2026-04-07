@@ -61,7 +61,7 @@ goto \${target}
 echo Booting Alpine...
 kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
   modules=loop,squashfs quiet nomodeset \
-  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main \
+  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
   modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
   ip=dhcp
 initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
@@ -71,7 +71,7 @@ boot
 echo Booting Alpine Development...
 kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
   modules=loop,squashfs quiet nomodeset \
-  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main \
+  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
   modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
   apks="build-base git python3 meson ninja pkgconf glib-dev pixman-dev zlib-dev libaio-dev util-linux-dev alsa-lib-dev sdl2-dev eudev-dev libdrm-dev linux-headers" \
   ip=dhcp
