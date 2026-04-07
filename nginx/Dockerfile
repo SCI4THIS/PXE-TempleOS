@@ -26,8 +26,15 @@ http {
   server {
     listen 80;
     root /var/www/htdocs;
-    location /dl-cdn/ {
-      rewrite ^/dl-cdn/(.*)\$ /\$1 break;
+    location /templeos.org/Downloads/TempleOS.ISO {
+      proxy_pass https://templeos.org/Downloads/TempleOS.ISO;
+      proxy_cache apkcache;
+      proxy_cache_valid 200 302 ${PROXY_PASS_TTL};
+      proxy_cache_valid 404 1m;
+      add_header X-Cache-Status \$upstream_cache_status;
+    }
+    location /dl-cdn.alpinelinux.org/ {
+      rewrite ^/dl-cdn.alpinelinux.org/(.*)\$ /\$1 break;
       try_files \$uri @mirror;
     }
     location @mirror {
@@ -44,19 +51,31 @@ EOF
 RUN install -Dm644 /dev/stdin ${STAGING_DIR}/var/www/htdocs/x86_64-efi/boot.ipxe <<EOF
 #!ipxe
 menu Network Boot Menu
-item --key s shell iPXE shell
 item --key a alpine Alpine Linux
+item --key d alpine-dev Alpine Linux - Development
+item --key s shell iPXE shell
 choose --timeout ${MENU_TIMEOUT} --default alpine target || goto alpine
 goto \${target}
 
 :alpine
 echo Booting Alpine...
-kernel http://${PXE_SERVER_IP}/dl-cdn/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
+kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
   modules=loop,squashfs quiet nomodeset \
-  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn/alpine/v3.23/main \
-  modloop=http://${PXE_SERVER_IP}/dl-cdn/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
+  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main \
+  modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
   ip=dhcp
-initrd http://${PXE_SERVER_IP}/dl-cdn/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
+initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
+boot
+
+:alpine-dev
+echo Booting Alpine Development...
+kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
+  modules=loop,squashfs quiet nomodeset \
+  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main \
+  modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
+  apks="build-base git python3 meson ninja pkgconf glib-dev pixman-dev zlib-dev libaio-dev util-linux-dev alsa-lib-dev sdl2-dev eudev-dev libdrm-dev linux-headers" \
+  ip=dhcp
+initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
 boot
 
 :shell
