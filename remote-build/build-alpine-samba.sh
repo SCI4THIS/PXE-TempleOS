@@ -1,3 +1,3 @@
 #!/bin/sh
 
-docker build -t alpine-samba .
+docker build --network=host -t alpine-samba .

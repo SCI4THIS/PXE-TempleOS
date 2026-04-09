@@ -1,10 +1,21 @@
 FROM alpine:3.20
 
-# Install Samba
-RUN apk add --no-cache samba samba-common-tools
+ARG UID=1000
+ARG GID=1000
+ARG USER=builduser
+ARG GROUP=buildgroup
 
-# Create shared directory
-RUN mkdir -p /shared && chmod 777 /shared
+# Install Samba
+RUN apk add --no-cache samba samba-common-tools shadow
+
+# Create matching group + user
+RUN addgroup -g ${GID} ${GROUP} && \
+    adduser -D -u ${UID} -G ${GROUP} ${USER}
+
+# Create shared directory owned by that user
+RUN mkdir -p ${SHARED_DIRECTORY} && \
+    chown -R ${UID}:${GID} ${SHARED_DIRECTORY} && \
+    chmod 0775 ${SHARED_DIRECTORY}
 
 # Create Samba config
 RUN cat > /etc/samba/smb.conf << EOF
@@ -13,7 +24,7 @@ RUN cat > /etc/samba/smb.conf << EOF
   server string = PXE Remote Build Samba Server
   security = user
   map to guest = Bad User
-  guest account = nobody
+  guest account = ${USER}
   log file = /dev/stdout
   max log size = 50
   load printers = no
@@ -25,9 +36,9 @@ RUN cat > /etc/samba/smb.conf << EOF
   writeable = yes
   guest ok = yes
   read only = no
-  force user = nobody
+  force user = ${USER}
 EOF
 
 EXPOSE 139 445
-CMD [ "sh", "-c", "smbd --foreground --no-process-group" ]
+CMD [ "smbd", "--foreground",  "--no-process-group" ]
 
