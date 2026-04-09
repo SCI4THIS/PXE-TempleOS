@@ -1,3 +1,8 @@
 #!/bin/sh
 
-docker build --network=host -t alpine-samba .
+docker build \
+  --build-arg UID=$(id -u) \
+  --build-arg GID=$(id -g) \
+  --network=host \
+  -t alpine-samba \
+  .

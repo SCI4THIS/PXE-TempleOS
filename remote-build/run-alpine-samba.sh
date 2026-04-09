@@ -1,3 +1,3 @@
 #!/bin/sh
 
-docker run --rm --network=host -v ./build:/shared alpine-samba
+docker run --rm --network=host -v ./shared:/shared alpine-samba

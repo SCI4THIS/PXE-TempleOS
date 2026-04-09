@@ -4,6 +4,7 @@ ARG UID=1000
 ARG GID=1000
 ARG USER=builduser
 ARG GROUP=buildgroup
+ARG SHARED_DIRECTORY=/shared
 
 # Install Samba
 RUN apk add --no-cache samba samba-common-tools shadow
@@ -25,18 +26,22 @@ RUN cat > /etc/samba/smb.conf << EOF
   security = user
   map to guest = Bad User
   guest account = ${USER}
+  unix extensions = no
   log file = /dev/stdout
   max log size = 50
   load printers = no
   disable spoolss = yes
 
-[build]
-  path = /shared
+[shared]
+  path = ${SHARED_DIRECTORY}
   browseable = yes
   writeable = yes
   guest ok = yes
+  guest only = yes
   read only = no
   force user = ${USER}
+  create mask = 0664
+  directory mask = 0775
 EOF
 
 EXPOSE 139 445
