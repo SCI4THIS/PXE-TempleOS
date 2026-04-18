@@ -81,7 +81,7 @@ def main():
     # ------------------------
     # Second pass: validation
     # ------------------------
-    tar_stream = tarfile.open(fileobj=sys.stdout.buffer, mode="w")
+    tar_stream = tarfile.open(fileobj=sys.stdout.buffer, mode="w|")
 
     for entry in data["files"]:
         name = entry["name"].lstrip("/")  # safety: no absolute paths

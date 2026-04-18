@@ -48,6 +48,21 @@ http {
 }
 EOF
 
+RUN install -Dm644 /dev/stdin /tmp/dev-apkovl.yaml <<EOF
+files:
+  - name: etc/local.d/mount.start
+    mode: 0755
+    content: |
+      #!/bin/sh
+      mount -t cifs //${PXE_SERVER_IP}/shared /mnt -o guest
+
+  - name: etc/.default_boot_services
+    mode: 0644
+EOF
+
+COPY yaml2tar.py /tmp/yaml2tar.py
+RUN python3 /tmp/yaml2tar.py /tmp/dev-apkovl.yaml | gzip > ${STAGING_DIR}/var/www/htdocs/dev-apkovl.tar.gz
+
 RUN install -Dm644 /dev/stdin ${STAGING_DIR}/var/www/htdocs/x86_64-efi/boot.ipxe <<EOF
 #!ipxe
 menu Network Boot Menu
@@ -72,6 +87,7 @@ echo Booting Alpine Development...
 kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
   modules=loop,squashfs quiet nomodeset \
   alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
+  apkovl=http://${PXE_SERVER_IP}/dev-apkovl.tar.gz \
   modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
   pkgs=build-base,git,python3,meson,ninja,pkgconf,glib-dev,pixman-dev,zlib-dev,libaio-dev,util-linux-dev,alsa-lib-dev,sdl2-dev,eudev-dev,libdrm-dev,linux-headers,cifs-utils,alpine-sdk,sudo \
   ntp=pool.ntp.org \
@@ -83,19 +99,6 @@ boot
 shell
 EOF
 
-RUN install -Dm644 /dev/stdin /tmp/dev-apkovl.yaml <<EOF
-files:
-  - name: etc/local.d/mount.start
-    mode: 0755
-    content: |
-      #!/bin/sh
-      mount -t cifs //192.168.1.17/shared /mnt -o guest
-
-  - name: etc/.default_boot_services
-    mode: 0644
-EOF
-
-COPY yaml2tar.py /tmp/yaml2tar.py
 
 RUN install -Dm700 /dev/stdin /start.sh <<EOF
 #!/bin/sh
