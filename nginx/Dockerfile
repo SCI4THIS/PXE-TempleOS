@@ -61,7 +61,8 @@ files:
 EOF
 
 COPY yaml2tar.py /tmp/yaml2tar.py
-RUN python3 /tmp/yaml2tar.py /tmp/dev-apkovl.yaml | gzip > ${STAGING_DIR}/var/www/htdocs/dev-apkovl.tar.gz
+RUN python3 /tmp/yaml2tar.py /tmp/dev-apkovl.yaml | gzip > /tmp/dev-apkovl.tar.gz
+RUN install -Dm644 /tmp/dev-apkovl.tar.gz ${STAGING_DIR}/var/www/htdocs/dev-apkovl.tar.gz
 
 RUN install -Dm644 /dev/stdin ${STAGING_DIR}/var/www/htdocs/x86_64-efi/boot.ipxe <<EOF
 #!ipxe
