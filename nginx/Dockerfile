@@ -51,12 +51,19 @@ EOF
 RUN install -Dm644 /dev/stdin /tmp/dev-apkovl.yaml <<EOF
 files:
   - name: etc/local.d/mount.start
+    type: "file"
     mode: "0755"
     content: |
       #!/bin/sh
       mount -t cifs //${PXE_SERVER_IP}/shared /mnt -o guest
 
+  - name: etc/runlevels/default/local
+    type: "symlink"
+    mode: "0777"
+    target: "/etc/init.d/local"
+
   - name: etc/.default_boot_services
+    type: "file"
     mode: "0644"
     content: |
 

@@ -17,13 +17,20 @@ SCHEMA = {
             "type": "array",
             "items": {
                 "type": "object",
-                "required": ["name", "content"],
+                "required": ["name"],
                 "properties": {
                     "name": {
                         "type": "string",
                         "minLength": 1
                     },
+                    "type": {
+                        "type": "string",
+                        "enum": ["file", "symlink"]
+                    },
                     "content": {
+                        "type": "string"
+                    },
+                    "target": {
                         "type": "string"
                     },
                     "mode": {
@@ -31,7 +38,21 @@ SCHEMA = {
                         "pattern": "^[0-7]{3,4}$"
                     }
                 },
-                "additionalProperties": False
+                "additionalProperties": False,
+                "oneOf": [
+                    {
+                        "properties": {
+                            "type": { "const": "file" }
+                        },
+                        "required": ["content"]
+                    },
+                    {
+                        "properties": {
+                            "type": { "const": "symlink" }
+                        },
+                        "required": ["target"]
+                    }
+                ]
             }
         }
     },
@@ -85,14 +106,22 @@ def main():
 
     for entry in data["files"]:
         name = entry["name"].lstrip("/")  # safety: no absolute paths
-        content = entry["content"].encode("utf-8")
         mode = parse_mode(entry.get("mode"))
+        ftype = entry.get("type", "file")
 
         info = tarfile.TarInfo(name=name)
-        info.size = len(content)
         info.mode = mode
 
-        tar_stream.addfile(info, io.BytesIO(content))
+        if ftype == "symlink":
+            target = entry["target"]
+            info.type = tarfile.SYMTYPE
+            info.linkname = target
+            info.size = 0
+            tar_stream.addfile(info)
+        else:
+            content = entry.get("content", "").encode("utf-8")
+            info.size = len(content)
+            tar_stream.addfile(info, io.BytesIO(content))
 
     tar_stream.close()
 
