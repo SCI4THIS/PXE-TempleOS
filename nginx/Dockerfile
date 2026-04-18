@@ -51,13 +51,15 @@ EOF
 RUN install -Dm644 /dev/stdin /tmp/dev-apkovl.yaml <<EOF
 files:
   - name: etc/local.d/mount.start
-    mode: 0755
+    mode: "0755"
     content: |
       #!/bin/sh
       mount -t cifs //${PXE_SERVER_IP}/shared /mnt -o guest
 
   - name: etc/.default_boot_services
-    mode: 0644
+    mode: "0644"
+    content: |
+
 EOF
 
 COPY yaml2tar.py /tmp/yaml2tar.py
