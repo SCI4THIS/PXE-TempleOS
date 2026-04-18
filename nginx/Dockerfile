@@ -1,6 +1,6 @@
 FROM alpine:3.20
 
-RUN apk add --no-cache nginx
+RUN apk add --no-cache nginx python3 py3-yaml py3-jsonschema
 
 ENV STAGING_DIR=/tmp/staging
 
@@ -73,7 +73,7 @@ kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netb
   modules=loop,squashfs quiet nomodeset \
   alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
   modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
-  pkgs=build-base,git,python3,meson,ninja,pkgconf,glib-dev,pixman-dev,zlib-dev,libaio-dev,util-linux-dev,alsa-lib-dev,sdl2-dev,eudev-dev,libdrm-dev,linux-headers,cifs-utils \
+  pkgs=build-base,git,python3,meson,ninja,pkgconf,glib-dev,pixman-dev,zlib-dev,libaio-dev,util-linux-dev,alsa-lib-dev,sdl2-dev,eudev-dev,libdrm-dev,linux-headers,cifs-utils,alpine-sdk,sudo \
   ntp=pool.ntp.org \
   ip=dhcp
 initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
@@ -82,6 +82,20 @@ boot
 :shell
 shell
 EOF
+
+RUN install -Dm644 /dev/stdin /tmp/dev-apkovl.yaml <<EOF
+files:
+  - name: etc/local.d/mount.start
+    mode: 0755
+    content: |
+      #!/bin/sh
+      mount -t cifs //192.168.1.17/shared /mnt -o guest
+
+  - name: etc/.default_boot_services
+    mode: 0644
+EOF
+
+COPY yaml2tar.py /tmp/yaml2tar.py
 
 RUN install -Dm700 /dev/stdin /start.sh <<EOF
 #!/bin/sh
