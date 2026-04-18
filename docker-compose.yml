@@ -22,3 +22,16 @@ services:
     network_mode: host
     volumes:
       - ./nginx/www:/var/www/htdocs
+
+  samba:
+    build:
+      context: ./samba
+      network: host
+      args:
+        PXE_SERVER_IP: ${PXE_SERVER_IP}
+        UID: ${UID}
+        GID: ${GID}
+    container_name: pxe-samba
+    network_mode: host
+    volumes:
+      - ./samba/shared:/shared
