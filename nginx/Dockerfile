@@ -70,7 +70,7 @@ files:
     mode: "0777"
     target: "/etc/init.d/local"
 
-  - name: /etc/qemu-build/01-clone.sh
+  - name: etc/qemu-build/01-clone.sh
     type: "file"
     mode: "0755"
     content: |
@@ -80,7 +80,7 @@ files:
       git clone https://gitlab.com/qemu-project/qemu.git
       cd -
 
-  - name: /etc/qemu-build/02-checkout-stable-10.2.sh
+  - name: etc/qemu-build/02-checkout-stable-10.2.sh
     type: "file"
     mode: "0755"
     content: |
@@ -90,29 +90,47 @@ files:
       git checkout stable-10.2
       cd -
 
-  - name: /etc/qemu-build/03-configure.sh
+  - name: etc/qemu-build/03-configure.sh
     type: "file"
     mode: "0755"
     content: |
       #!/bin/sh
       # In merged dir, configure build to only make what we need
       cd /run/overlay/merged/qemu
-      ./configure --target-list=x86_64-softmmu \
-                  --enable-sdl \
-                  --enable-libudev \
-                  --audio-drv-list=alsa \
-                  --disable-opengl \
-                  --disable-virglrenderer \
-                  --disable-gtk \
-                  --disable-vnc \
-                  --disable-spice \
-                  --disable-slirp \
-                  --disable-curl \
-                  --disable-libnfs \
-                  --disable-jack \
-                  --disable-oss \
-                  --disable-tools \
-                  --disable-docs
+      ./configure \
+      --target-list=x86_64-softmmu \
+      --enable-sdl \
+      --enable-libudev \
+      --audio-drv-list=alsa \
+      --disable-opengl \
+      --disable-virglrenderer \
+      --disable-gtk \
+      --disable-vnc \
+      --disable-spice \
+      --disable-slirp \
+      --disable-curl \
+      --disable-libnfs \
+      --disable-jack \
+      --disable-oss \
+      --disable-tools \
+      --disable-docs
+      cd -
+
+  - name: etc/qemu-build/04-fixup-symlinks.sh
+    type: "file"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # qemu configure outputs symlinks as regular files.  This fixes them.
+      cd /run/overlay/merged/qemu
+      find . -type f | while read f; do
+        target=$(head -n 1 "$f")
+        if echo "$target" | grep -qE '^(\.\./|/)' && [ $(wc -l < "$f") -eq 0 ]; then
+          echo "Converting $f -> $target"
+          rm "$f"
+          ln -s "$target" "$f"
+        fi
+      done
       cd -
 
   - name: etc/.default_boot_services
