@@ -154,6 +154,28 @@ files:
       DESTDIR=/mnt/qemu-install ninja install
       cd -
 
+  - name: etc/qemu-build/07-create-abuild-user.sh
+    type: "fail"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Create abuild group and user check if abuild.key is on samba share
+      # if it is copy it over, otherwise generate it and store it on the samba share
+      addgroup abuild
+      adduser -D -G abuild abuild
+      if [ -f /mnt/abuild.rsa ] && if [ -f /mnt/abuild.rsa.pub ] && if [ -f /mnt/abuild.conf ]; then
+        mkdir /home/abuild/.abuild/
+        cp /mnt/abuild.rsa /home/abuild/.abuild/abuild.rsa
+        cp /mnt/abuild.rsa.pub /home/abuild/.abuild/abuild.rsa.pub
+        cp /mnt/abuild.conf /home/abuild/.abuild/abuild.conf
+        chown -R abuild:abuild /home/abuild/.abuild/
+      else
+        su abuild -c "echo /home/abuild/.abuild/abuild.rsa | abuild-keygen -a"
+        cp /home/abuild/.abuild/abuild.rsa /mnt/abuild.rsa
+        cp /home/abuild/.abuild/abuild.rsa.pub /mnt/abuild.rsa.pub
+        cp /home/abuild/.abuild/abuild.conf /mnt/abuild.conf
+      fi
+
   - name: etc/.default_boot_services
     type: "file"
     mode: "0644"
