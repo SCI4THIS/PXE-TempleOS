@@ -70,6 +70,51 @@ files:
     mode: "0777"
     target: "/etc/init.d/local"
 
+  - name: /etc/qemu-build/01-clone.sh
+    type: "file"
+    mode: "0755"
+    content: |
+    #!/bin/sh
+    # Clone qemu project in the lowerdir
+    pushd /mnt
+    git clone https://gitlab.com/qemu-project/qemu.git
+    popd
+
+  - name: /etc/qemu-build/02-checkout-stable-10.2.sh
+    type: "file"
+    mode: "0755"
+    content: |
+    #!/bin/sh
+    # Checkout stable-10.2 release
+    pushd /mnt/qemu
+    git checkout stable-10.2
+    popd
+
+  - name: /etc/qemu-build/03-configure.sh
+    type: "file"
+    mode: "0755"
+    content: |
+    #!/bin/sh
+    # In merged dir, configure build to only make what we need
+    pushd /run/overlay/merged/qemu
+    ./configure --target-list=x86_64-softmmu \
+                --enable-sdl \
+                --enable-libudev \
+                --audio-drv-list=alsa \
+                --disable-opengl \
+                --disable-virglrenderer \
+                --disable-gtk \
+                --disable-vnc \
+                --disable-spice \
+                --disable-slirp \
+                --disable-curl \
+                --disable-libnfs \
+                --disable-jack \
+                --disable-oss \
+                --disable-tools \
+                --disable-docs
+    popd
+
   - name: etc/.default_boot_services
     type: "file"
     mode: "0644"
