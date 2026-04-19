@@ -188,6 +188,9 @@ files:
         cp /home/abuild/.abuild/abuild.rsa.pub /mnt/abuild.rsa.pub
         cp /home/abuild/.abuild/abuild.conf /mnt/abuild.conf
       fi
+      cat > /home/abuild/build-apk.sh << EOF
+      newapkbuild -d "Custom QEMU build (SDL, ALSA, no OSS/JACK)" qemu-10.2.0
+      EOF
 
   - name: etc/.default_boot_services
     type: "file"
