@@ -50,6 +50,20 @@ EOF
 
 RUN install -Dm644 /dev/stdin /tmp/dev-apkovl.yaml <<EOF
 files:
+  - name: etc/motd
+    type: "file"
+    mode: "0644"
+    content: |
+      Welcome to Alpine!  This is a netboot configuration specifically designed for
+      compiling qemu.  Compiling qemu needs symlinks which are not supported by samba.
+      OverlayFS is used to overcome this.  The system is setup as follows:
+        /mnt/               -- samba     (lower)
+        /run/overlay/work   -- OverlayFS (work)
+        /run/overlay/merged -- OverlayFS (merged)
+        /run/overlay/upper  -- OverlayFS (upper)
+      There are some scripting chunks to help guide through the process in
+        /etc/qemu-build/    -- build scripts
+
   - name: etc/local.d/mount.start
     type: "file"
     mode: "0755"
