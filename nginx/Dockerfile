@@ -55,7 +55,15 @@ files:
     mode: "0755"
     content: |
       #!/bin/sh
+      # Add samba mount
       mount -t cifs //${PXE_SERVER_IP}/shared /mnt -o guest
+      # Create local overlayFS to handle symlinks
+      mkdir /run/overlay
+      mount -t tmpfs tmpfs /run/overlay
+      mkdir /run/overlay/upper
+      mkdir /run/overlay/work
+      mkdir /run/overlay/merged
+      mount -t overlay overlay -o lowerdir=/mnt,upperdir=/run/overlay/upper,workdir=/run/overlay/work /run/overlay/merged
 
   - name: etc/runlevels/default/local
     type: "symlink"
