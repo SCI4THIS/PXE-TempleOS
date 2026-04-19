@@ -133,6 +133,27 @@ files:
       done
       cd -
 
+  - name: etc/qemu-build/05-ninja-compile.sh
+    type: "file"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Run through the compilation
+      cd /run/overlay/merged/qemu/build
+      ninja
+      cd -
+
+  - name: etc/qemu-build/06-ninja-install.sh
+    type: "file"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Install back to lower dir
+      cd /run/overlay/merged/qemu/build
+      mkdir -p /mnt/qemu-install
+      DESTDIR=/mnt/qemu-install ninja install
+      cd -
+
   - name: etc/.default_boot_services
     type: "file"
     mode: "0644"
