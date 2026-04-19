@@ -155,15 +155,14 @@ files:
       cd -
 
   - name: etc/qemu-build/07-create-abuild-user.sh
-    type: "fail"
+    type: "file"
     mode: "0755"
     content: |
       #!/bin/sh
       # Create abuild group and user check if abuild.key is on samba share
       # if it is copy it over, otherwise generate it and store it on the samba share
-      addgroup abuild
       adduser -D -G abuild abuild
-      if [ -f /mnt/abuild.rsa ] && if [ -f /mnt/abuild.rsa.pub ] && if [ -f /mnt/abuild.conf ]; then
+      if [ -f /mnt/abuild.rsa ] && [ -f /mnt/abuild.rsa.pub ] && [ -f /mnt/abuild.conf ]; then
         mkdir /home/abuild/.abuild/
         cp /mnt/abuild.rsa /home/abuild/.abuild/abuild.rsa
         cp /mnt/abuild.rsa.pub /home/abuild/.abuild/abuild.rsa.pub
