@@ -124,11 +124,11 @@ files:
       # qemu configure outputs symlinks as regular files.  This fixes them.
       cd /run/overlay/merged/qemu
       find . -type f | while read f; do
-        target=$(head -n 1 "$f")
-        if echo "$target" | grep -qE '^(\.\./|/)' && [ $(wc -l < "$f") -eq 0 ]; then
-          echo "Converting $f -> $target"
-          rm "$f"
-          ln -s "$target" "$f"
+        target=\$(head -n 1 "\$f")
+        if echo "\$target" | grep -qE '^(\.\./|/)' && [ \$(wc -l < "\$f") -eq 0 ]; then
+          echo "Converting \$f -> \$target"
+          rm "\$f"
+          ln -s "\$target" "\$f"
         fi
       done
       cd -
