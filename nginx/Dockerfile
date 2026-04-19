@@ -112,6 +112,7 @@ files:
       # In merged dir, configure build to only make what we need
       cd /run/overlay/merged/qemu
       ./configure \
+      --prefix=/usr \
       --target-list=x86_64-softmmu \
       --enable-sdl \
       --enable-libudev \
@@ -189,8 +190,10 @@ files:
         cp /home/abuild/.abuild/abuild.conf /mnt/abuild.conf
       fi
       cat > /home/abuild/build-apk.sh << EOF
-      newapkbuild -d "Custom QEMU build (SDL, ALSA, no OSS/JACK)" qemu-10.2.0
+      newapkbuild -d "Custom QEMU build (SDL, ALSA, no OSS/JACK)" -u "https://sci4this.com" -l "GPL-2.0-or-later" qemu-10.2.0
       EOF
+      chmod 755 /home/abuild/build-apk.sh
+      chown abuild:abuild /home/abuild/build-apk.sh
 
   - name: etc/.default_boot_services
     type: "file"
