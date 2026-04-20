@@ -182,7 +182,7 @@ files:
         cp /home/abuild/.abuild/abuild.conf /mnt/abuild.conf
       fi
       cp /home/abuild/.abuild/abuild.rsa.pub /etc/apk/keys
-      mkdir /home/abuild/qemu-templeos
+      mkdir -p /home/abuild/qemu-templeos
       cat > /home/abuild/qemu-templeos/APKBUILD << EOF
       pkgname=qemu-templeos
       pkgver=10.2.0
@@ -210,7 +210,7 @@ files:
       # This will build the apk
       cd /home/abuild/qemu-templeos
       su abuild -c "abuild checksum"
-      su abuild -c "abuild -r"
+      su abuild -c "PACKAGES=/mnt/apk/packages abuild -r"
       cd -
 
   - name: etc/qemu-build/09-copy-apk-to-samba.sh
