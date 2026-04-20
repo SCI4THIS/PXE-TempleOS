@@ -246,7 +246,7 @@ files:
       wget -O /iso/TempleOS.ISO http://${PXE_SERVER_IP}/templeos.org/Downloads/TempleOS.ISO
       wget -O /etc/apk/keys/abuild.rsa.pub http://${PXE_SERVER_IP}/apk/abuild.rsa.pub
       apk update
-      apk add qemu-templeos
+      apk add sdl2 qemu-templeos qemu-ui-sdl
 
   - name: etc/apk/repositories
     type: "file"
@@ -255,6 +255,23 @@ files:
       http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main
       http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community
       http://${PXE_SERVER_IP}/apk
+
+  - name: etc/start-qemu-templeos.sh
+    type: "file"
+    mode: "0755"
+    content: |
+      modprobe kvm_amd
+      qemu-system-x86_64 \
+      -m 512 \
+      --enable-kvm \
+      -cpu max \
+      -M pc \
+      -cdrom /iso/TempleOS.ISO \
+      -boot d \
+      -nic none \
+      -display sdl \
+      -audiodev "{ 'driver': 'alsa', 'id': 'snd0', 'out': { 'dev': 'hw:1,0' } }" \
+      -machine pcspk-audiodev=snd0
 
   - name: etc/runlevels/default/local
     type: "symlink"
