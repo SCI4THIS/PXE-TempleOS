@@ -219,7 +219,7 @@ files:
       # This will build the apk
       cd /home/abuild/qemu-templeos
       su abuild -c "abuild checksum"
-      su aubild -c "abuild -r"
+      su abuild -c "abuild -r"
       cd -
 
   - name: etc/qemu-build/09-copy-apk-to-samba.sh
