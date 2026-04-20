@@ -201,6 +201,10 @@ files:
       }
       EOF
       chown -R abuild:abuild /home/abuild/qemu-templeos
+      umount /run/overlay/merged
+      umount /run/overlay
+      umount /mnt
+      mount -t cifs //${PXE_SERVER_IP}/shared /mnt -o guest,uid=\$(id -u abuild),gid=\$(id -g abuild)
 
   - name: etc/qemu-build/08-build-apk.sh
     type: "file"
