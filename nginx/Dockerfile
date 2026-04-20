@@ -166,6 +166,7 @@ files:
       # Install back to lower dir
       cd /run/overlay/merged/qemu/build
       mkdir -p /mnt/qemu-install
+      rm -rf /mnt/qemu-install/*
       DESTDIR=/mnt/qemu-install ninja install
       cd -
 
@@ -189,11 +190,25 @@ files:
         cp /home/abuild/.abuild/abuild.rsa.pub /mnt/abuild.rsa.pub
         cp /home/abuild/.abuild/abuild.conf /mnt/abuild.conf
       fi
-      cat > /home/abuild/build-apk.sh << EOF
-      newapkbuild -d "Custom QEMU build (SDL, ALSA, no OSS/JACK)" -u "https://sci4this.com" -l "GPL-2.0-or-later" qemu-10.2.0
+      mkdir /home/abuild/qemu-templeos
+      cat > /home/abuild/qemu-templeos/APKBUILD << EOF
+      pkgname=qemu-templeos
+      pkgver=10.2.0
+      pkgrel=0
+      pkgdesc="Custom QEMU build (SDL, ALSA, no OSS/JACK)"
+      url="https://sci4this.com"
+      arch="x86_64"
+      license="GPL-2.0-or-later"
+      depends="glib pixman sdl2 alsa-lib"
+      options="!strip !check"
+      source=""
+      builddir=""
+      package() {
+        mkdir -p "\$pkgdir"
+        cp -a /mnt/qemu-install/* "\$pkgdir"/
+      }
       EOF
-      chmod 755 /home/abuild/build-apk.sh
-      chown abuild:abuild /home/abuild/build-apk.sh
+      chown -R abuild:abuild /home/abuild/qemu-templeos
 
   - name: etc/.default_boot_services
     type: "file"
