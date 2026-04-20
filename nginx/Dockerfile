@@ -117,17 +117,8 @@ files:
       --enable-sdl \
       --enable-libudev \
       --audio-drv-list=alsa \
-      --disable-opengl \
-      --disable-virglrenderer \
-      --disable-gtk \
-      --disable-vnc \
-      --disable-spice \
-      --disable-slirp \
-      --disable-curl \
-      --disable-libnfs \
       --disable-jack \
       --disable-oss \
-      --disable-tools \
       --disable-docs
       cd -
 
@@ -244,15 +235,9 @@ files:
     type: "file"
     mode: "0644"
     content: |
-      Welcome to Alpine!  This is a netboot configuration specifically designed for
-      compiling qemu.  Compiling qemu needs symlinks which are not supported by samba.
-      OverlayFS is used to overcome this.  The system is setup as follows:
-        /mnt/               -- samba     (lower)
-        /run/overlay/work   -- OverlayFS (work)
-        /run/overlay/merged -- OverlayFS (merged)
-        /run/overlay/upper  -- OverlayFS (upper)
-      There are some scripting chunks to help guide through the process in
-        /etc/qemu-build/    -- build scripts
+      Welcome to Alpine!  This is a netboot variant that is setup to run a custom
+      qemu compilation that has been tailored to handle the audio and reduced graphics
+      of TempleOS.  It should auto boot into TempleOS.
 
   - name: etc/local.d/mount.start
     type: "file"
