@@ -238,18 +238,81 @@ files:
 
 EOF
 
+RUN install -Dm644 /dev/stdin /tmp/templeos-apkovl.yaml <<EOF
+files:
+  - name: etc/motd
+    type: "file"
+    mode: "0644"
+    content: |
+      Welcome to Alpine!  This is a netboot configuration specifically designed for
+      compiling qemu.  Compiling qemu needs symlinks which are not supported by samba.
+      OverlayFS is used to overcome this.  The system is setup as follows:
+        /mnt/               -- samba     (lower)
+        /run/overlay/work   -- OverlayFS (work)
+        /run/overlay/merged -- OverlayFS (merged)
+        /run/overlay/upper  -- OverlayFS (upper)
+      There are some scripting chunks to help guide through the process in
+        /etc/qemu-build/    -- build scripts
+
+  - name: etc/local.d/mount.start
+    type: "file"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Add samba mount
+      mkdir /iso
+      wget -O /iso/TempleOS.ISO http://${PXE_SERVER_IP}/templeos.org/Downloads/TempleOS.ISO
+      wget -O /etc/apk/keys/abuild.rsa.pub http://${PXE_SERVER_IP}/apk/abuild.rsa.pub
+      apk update
+      apk add qemu-templeos
+
+  - name: etc/apk/repositories
+    type: "file"
+    mode: "0644"
+    content: |
+      http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main
+      http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community
+      http://${PXE_SERVER_IP}/apk
+
+  - name: etc/runlevels/default/local
+    type: "symlink"
+    mode: "0777"
+    target: "/etc/init.d/local"
+
+  - name: etc/.default_boot_services
+    type: "file"
+    mode: "0644"
+    content: |
+EOF
+
 COPY yaml2tar.py /tmp/yaml2tar.py
 RUN python3 /tmp/yaml2tar.py /tmp/dev-apkovl.yaml | gzip > /tmp/dev-apkovl.tar.gz
+RUN python3 /tmp/yaml2tar.py /tmp/templeos-apkovl.yaml | gzip > /tmp/templeos-apkovl.tar.gz
 RUN install -Dm644 /tmp/dev-apkovl.tar.gz ${STAGING_DIR}/var/www/htdocs/dev-apkovl.tar.gz
+RUN install -Dm644 /tmp/templeos-apkovl.tar.gz ${STAGING_DIR}/var/www/htdocs/templeos-apkovl.tar.gz
 
 RUN install -Dm644 /dev/stdin ${STAGING_DIR}/var/www/htdocs/x86_64-efi/boot.ipxe <<EOF
 #!ipxe
 menu Network Boot Menu
 item --key a alpine Alpine Linux
+item --key t templeos Temple OS (Alpine Linux + QEMU)
 item --key d alpine-dev Alpine Linux - Development
 item --key s shell iPXE shell
-choose --timeout ${MENU_TIMEOUT} --default alpine target || goto alpine
+choose --default alpine target || goto alpine
 goto \${target}
+
+:templeos
+echo Booting TempleOS...
+kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
+  modules=loop,squashfs quiet nomodeset \
+  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
+  apkovl=http://${PXE_SERVER_IP}/templeos-apkovl.tar.gz \
+  modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
+  ntp=pool.ntp.org \
+  ip=dhcp
+initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
+boot
+
 
 :alpine
 echo Booting Alpine...
@@ -257,6 +320,7 @@ kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netb
   modules=loop,squashfs quiet nomodeset \
   alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
   modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
+  ntp=pool.ntp.org \
   ip=dhcp
 initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
 boot
