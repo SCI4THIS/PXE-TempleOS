@@ -214,17 +214,10 @@ files:
       # This will build the apk
       cd /home/abuild/qemu-templeos
       su abuild -c "abuild checksum"
-      su abuild -c "PACKAGES=/mnt/apk/packages abuild -r"
+      su abuild -c "mkdir -p /mnt/apk/packages"
+      su abuild -c "ln -s /mnt/apk/packages /home/abuild/packages"
+      su abuild -c "abuild -r"
       cd -
-
-  - name: etc/qemu-build/09-copy-apk-to-samba.sh
-    type: "file"
-    mode: "0755"
-    content: |
-      #!/bin/sh
-      # This moves the apk up to the samba server
-      mkdir -p /mnt/apk/x86_64
-      cp /home/abuild/packages/abuild/x86_64/* /mnt/apk/x86_64
 
   - name: etc/.default_boot_services
     type: "file"
