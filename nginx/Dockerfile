@@ -111,25 +111,15 @@ files:
       #!/bin/sh
       # In merged dir, configure build to only make what we need
       cd /run/overlay/merged/qemu
-      meson setup build \
-      -Ddefault_library=static \
-      -Dstrip=true \
-      -Dgtk=disabled \
-      -Dsdl=disabled \
-      -Dvnc=disabled \
-      -Dspice=disabled \
-      -Dopengl=enabled \
-      -Degl=enabled \
-      -Dgbm=enabled \
-      -Dvirglrenderer=disabled \
-      -Ddocs=disabled \
-      -Dtools=disabled \
-      -Dcapstone=disabled \
-      -Dslirp=disabled \
-      -Dcurl=disabled \
-      -Dlibusb=disabled \
-      -Daudio_drv_list=alsa \
-      -Dtarget_list=x86_64-softmmu
+      ./configure \
+      --prefix=/usr \
+      --target-list=x86_64-softmmu \
+      --enable-sdl \
+      --enable-libudev \
+      --audio-drv-list=alsa \
+      --disable-jack \
+      --disable-oss \
+      --disable-docs
       cd -
 
   - name: etc/qemu-build/04-fixup-symlinks.sh
