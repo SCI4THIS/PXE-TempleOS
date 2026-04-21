@@ -116,6 +116,7 @@ files:
       --target-list=x86_64-softmmu \
       --enable-sdl \
       --enable-libudev \
+      --enable-opengl \
       --audio-drv-list=alsa \
       --disable-jack \
       --disable-oss \
@@ -331,7 +332,7 @@ kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netb
   alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
   apkovl=http://${PXE_SERVER_IP}/dev-apkovl.tar.gz \
   modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
-  pkgs=build-base,git,python3,meson,ninja,pkgconf,glib-dev,pixman-dev,zlib-dev,libaio-dev,util-linux-dev,alsa-lib-dev,sdl2-dev,eudev-dev,libdrm-dev,linux-headers,cifs-utils,alpine-sdk,sudo \
+  pkgs=build-base,git,python3,meson,ninja,pkgconf,glib-dev,pixman-dev,zlib-dev,libaio-dev,util-linux-dev,alsa-lib-dev,sdl2-dev,eudev-dev,libdrm-dev,linux-headers,cifs-utils,alpine-sdk,sudo,mesa-dev,mesa-egl,mesa-gbm,libepoxy-dev \
   ntp=pool.ntp.org \
   ip=dhcp
 initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
