@@ -248,6 +248,22 @@ files:
       wget -O /etc/apk/keys/abuild.rsa.pub http://${PXE_SERVER_IP}/apk/abuild.rsa.pub
       apk update
       apk add sdl2 qemu-templeos qemu-ui-sdl
+      modprobe kvm_amd
+      amixer -c 1 set Master 80\% unmute
+      qemu-system-x86_64 \
+      -m 512 \
+      --enable-kvm \
+      -cpu max \
+      -M pc \
+      -cdrom /iso/TempleOS.ISO \
+      -boot d \
+      -nic none \
+      -display sdl \
+      -audiodev "{ 'driver': 'alsa', 'id': 'snd0', 'out': { 'dev': 'hw:1,0' } }" \
+      -machine pcspk-audiodev=snd0 \
+      -serial none \
+      -parallel none \
+      -monitor none
 
   - name: etc/apk/repositories
     type: "file"
