@@ -273,7 +273,10 @@ files:
       -nic none \
       -display sdl \
       -audiodev "{ 'driver': 'alsa', 'id': 'snd0', 'out': { 'dev': 'hw:1,0' } }" \
-      -machine pcspk-audiodev=snd0
+      -machine pcspk-audiodev=snd0 \
+      -serial none \
+      -parallel none \
+      -monitor none
 
   - name: etc/runlevels/default/local
     type: "symlink"
