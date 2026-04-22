@@ -192,7 +192,7 @@ files:
       url="https://sci4this.com"
       arch="x86_64"
       license="GPL-2.0-or-later"
-      depends="glib pixman sdl2 alsa-lib"
+      depends="glib pixman sdl2 alsa-lib mesa-dev"
       options="!strip !check"
       source=""
       builddir=""
