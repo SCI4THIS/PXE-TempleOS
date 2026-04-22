@@ -262,6 +262,7 @@ files:
     mode: "0755"
     content: |
       modprobe kvm_amd
+      amixer -c 1 set Master 80% unmute
       qemu-system-x86_64 \
       -m 512 \
       --enable-kvm \
