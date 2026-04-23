@@ -1,4 +1,4 @@
-#Project Overview
+# Project Overview
 
 This project creates a PXE netboot docker composition that is designed to run
 on a raspberry pi and creates a netboot entry to load into TempleOS.  TempleOS hardware
@@ -70,7 +70,7 @@ before the login prompt to create a full screen TempleOS experience.
 
 Drops into an iPXE shell environmet for debugging.
 
-#Quickstart
+# Quickstart
 
 #### Raspberry Pi
 sudo apt-get install docker-compose
