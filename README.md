@@ -73,17 +73,21 @@ Drops into an iPXE shell environmet for debugging.
 # Quickstart
 
 #### Raspberry Pi
+```
 sudo apt-get install docker-compose
 git clone https://github.com/SCI4THIS/PXE-TempleOS
 cd PXE-TempleOS
 ./gen-env.sh
 docker compose up --build
+```
 
 #### Laptop
+```
 ESC - custom boot options
 F12 - netboot
 Select Alpine Linux - Development <ENTER>
 username: root
+# no password
 /etc/qemu-build/01-clone.sh
 /etc/qemu-build/02-checkout-stable-10.2.sh
 /etc/qemu-build/03-configure.sh
@@ -92,13 +96,18 @@ username: root
 /etc/qemu-build/06-ninja-install.sh
 /etc/qemu-build/07-create-abuild-user.sh
 /etc/qemu-build/08-build-apk.sh
+```
 
 ##### Raspberry Pi
+```
 cd PXE-TempleOS
 sudo ./cp-samba-apk-to-nginx.sh
+```
 
 ##### Laptop
+```
 ESC - custom boot options
 F12 - netboot
 Select TempleOS (Alpine Linux + QEMU) <ENTER>
+```
 
