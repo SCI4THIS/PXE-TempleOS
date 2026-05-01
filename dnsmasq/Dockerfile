@@ -13,9 +13,13 @@ bind-interfaces
 
 dhcp-option=66,${PXE_SERVER_IP}
 dhcp-range=${NETWORK},proxy
+dhcp-match=set:ipxe,175
 
 pxe-service=X86-64_EFI,"UEFI PXE Boot",x86_64-efi/ipxe.efi
 pxe-service=X86PC,"BIOS PXE Boot",x86_64-pcbios/undionly.kpxe
+
+dhcp-boot=tag:!ipxe,x86_64-pcbios/undionly.kpxe
+dhcp-boot=tag:ipxe,http://${PXE_SERVER_IP}/x86_64-efi/autoexec.ipxe
 
 enable-tftp
 tftp-root=/tftpboot
@@ -26,12 +30,6 @@ log-facility=-
 EOF
 
 RUN install -Dm644 /dev/stdin ${STAGING_DIR}/tftpboot/x86_64-efi/autoexec.ipxe <<EOF
-#!ipxe
-dhcp
-chain http://${PXE_SERVER_IP}/x86_64-efi/boot.ipxe
-EOF
-
-RUN install -Dm644 /dev/stdin ${STAGING_DIR}/tftpboot/x86_64-pcbios/autoexec.ipxe <<EOF
 #!ipxe
 dhcp
 chain http://${PXE_SERVER_IP}/x86_64-efi/boot.ipxe
