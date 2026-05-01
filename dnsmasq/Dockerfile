@@ -15,7 +15,7 @@ dhcp-option=66,${PXE_SERVER_IP}
 dhcp-range=${NETWORK},proxy
 
 pxe-service=X86-64_EFI,"UEFI PXE Boot",x86_64-efi/ipxe.efi
-pxe-service=X86PC,"BIOS PXE Boot",x86_64-pcbios/unionly.kpxe
+pxe-service=X86PC,"BIOS PXE Boot",x86_64-pcbios/undionly.kpxe
 
 enable-tftp
 tftp-root=/tftpboot
