@@ -13,13 +13,10 @@ bind-interfaces
 
 dhcp-option=66,${PXE_SERVER_IP}
 dhcp-range=${NETWORK},proxy
-dhcp-match=set:ipxe,175
 
 pxe-service=X86-64_EFI,"UEFI PXE Boot",x86_64-efi/ipxe.efi
-pxe-service=X86PC,"BIOS PXE Boot",x86_64-pcbios/undionly.kpxe
-
-dhcp-boot=tag:!ipxe,x86_64-pcbios/undionly.kpxe
-dhcp-boot=tag:ipxe,http://${PXE_SERVER_IP}/x86_64-efi/autoexec.ipxe
+pxe-service=!ipxe,X86PC,"BIOS PXE Boot",x86_64-pcbios/undionly.kpxe
+pxe-service=ipxe,X86PC,"BIOS PXE Boot",x86_64-efi/ipxe.efi
 
 enable-tftp
 tftp-root=/tftpboot
