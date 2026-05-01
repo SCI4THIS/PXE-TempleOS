@@ -31,6 +31,12 @@ dhcp
 chain http://${PXE_SERVER_IP}/x86_64-efi/boot.ipxe
 EOF
 
+RUN install -Dm644 /dev/stdin ${STAGING_DIR}/tftpboot/x86_64-pcbios/autoexec.ipxe <<EOF
+#!ipxe
+dhcp
+chain http://${PXE_SERVER_IP}/x86_64-efi/boot.ipxe
+EOF
+
 RUN install -Dm700 /dev/stdin /start.sh <<EOF
 #!/bin/sh
 echo "Copying files from staging to root"
