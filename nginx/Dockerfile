@@ -57,12 +57,13 @@ files:
       Welcome to Alpine!  This is a netboot configuration specifically designed for
       compiling qemu.  Compiling qemu needs symlinks which are not supported by samba.
       OverlayFS is used to overcome this.  The system is setup as follows:
-        /mnt/               -- samba     (lower)
-        /run/overlay/work   -- OverlayFS (work)
-        /run/overlay/merged -- OverlayFS (merged)
-        /run/overlay/upper  -- OverlayFS (upper)
+        /mnt/                       -- samba     (lower)
+        /run/overlay/work           -- OverlayFS (work)
+        /run/overlay/merged         -- OverlayFS (merged)
+        /run/overlay/upper          -- OverlayFS (upper)
       There are some scripting chunks to help guide through the process in
-        /etc/qemu-build/    -- build scripts
+        /etc/qemu-build/            -- build scripts
+        /etc/tinycore-vmlinuz-build -- build scripts
 
   - name: etc/local.d/mount.start
     type: "file"
@@ -220,6 +221,24 @@ files:
       su abuild -c "abuild -r"
       cd -
 
+  - name: etc/tinycore-vmlinuz-build/01-clone.sh
+    type: "file"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Clone linux kernel in the lowerdir
+      cd /mnt
+      git clone --depth=1 https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git
+      cd -
+
+  - name: etc/tinycore-vmlinuz-build/02-wget-tinycore-config.sh
+    type: "file"
+    mode: "0755"
+    content: |
+      #!/bin/sh
+      # Grab config from tinycore
+      wget -O /tmp/config-6.18.2-tinycore64 http://tinycorelinux.net/17.x/x86_64/release/src/kernel/config-6.18.2-tinycore64
+
   - name: etc/.default_boot_services
     type: "file"
     mode: "0644"
@@ -318,8 +337,15 @@ item --key a alpine Alpine Linux
 item --key t templeos Temple OS (Alpine Linux + QEMU)
 item --key d alpine-dev Alpine Linux - Development
 item --key s shell iPXE shell
+item --key c tinycore Tiny Core Linux
 choose --default alpine target || goto alpine
 goto \${target}
+
+:tinycore
+echo Booting TinyCore...
+kernel http://${PXE_SERVER_IP}/tinycore/vmlinuz
+initrd http://${PXE_SERVER_IP}/tinycore/corepure64.gz
+boot
 
 :templeos
 echo Booting TempleOS...
@@ -352,7 +378,7 @@ kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netb
   alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
   apkovl=http://${PXE_SERVER_IP}/dev-apkovl.tar.gz \
   modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
-  pkgs=build-base,git,python3,meson,ninja,pkgconf,glib-dev,pixman-dev,zlib-dev,libaio-dev,util-linux-dev,alsa-lib-dev,sdl2-dev,eudev-dev,libdrm-dev,linux-headers,cifs-utils,alpine-sdk,sudo,mesa-dev,mesa-egl,mesa-gbm,libepoxy-dev \
+  pkgs=build-base,git,python3,meson,ninja,pkgconf,glib-dev,pixman-dev,zlib-dev,libaio-dev,util-linux-dev,alsa-lib-dev,sdl2-dev,eudev-dev,libdrm-dev,linux-headers,cifs-utils,alpine-sdk,sudo,mesa-dev,mesa-egl,mesa-gbm,libepoxy-dev,flex,bison,elfutils-dev,diffutils,grep,perl \
   ntp=pool.ntp.org \
   ip=dhcp
 initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
