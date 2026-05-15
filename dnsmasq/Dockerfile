@@ -12,7 +12,11 @@ interface=eth0
 
 dhcp-range=${NETWORK},proxy
 dhcp-match=set:ipxe,175
-dhcp-boot=tag:!ipxe,x86_64-pcbios/undionly.kpxe,,${PXE_SERVER_IP}
+
+dhcp-mac=set:realtek,10:1f:7f:*
+
+dhcp-boot=!realtek,tag:!ipxe,x86_64-pcbios/undionly.kpxe,,${PXE_SERVER_IP}
+dhcp-boot=realtek,tag:!ipxe,ipxe-legacy.pxe,,${PXE_SERVER_IP}
 dhcp-boot=tag:ipxe,x86_64-efi/autoexec.ipxe,,${PXE_SERVER_IP}
 
 pxe-service=X86-64_EFI,"UEFI PXE Boot",x86_64-efi/ipxe.efi
