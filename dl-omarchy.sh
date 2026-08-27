@@ -18,8 +18,13 @@ command -v xorriso >/dev/null || {
     exit 1
 }
 
-echo "Downloading Omarchy ${OMARCHY_VERSION}..."
-wget -c -O "$ISO" "$OMARCHY_URL"
+if [[ -f "$ISO" ]]; then
+  echo "Omarchy ISO already exists: $ISO"
+  echo "Skipping download."
+else
+  echo "Downloading Omarchy ${OMARCHY_VERSION}..."
+  wget -c -O "$ISO" "$OMARCHY_URL"
+fi
 
 echo "Verifying SHA-256..."
 echo "${OMARCHY_SHA256}  ${ISO}" | sha256sum -c -
