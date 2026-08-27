@@ -33,6 +33,13 @@ http {
       proxy_cache_valid 404 1m;
       add_header X-Cache-Status \$upstream_cache_status;
     }
+    location /iso.omarchy.org/omarchy-4.0.1.iso {
+      proxy_pass https://iso.omarchy.org/omarchy-4.0.1.iso;
+      proxy_cache apkcache;
+      proxy_cache_valid 200 302 ${PROXY_PASS_TTL};
+      proxy_cache_valid 404 1m;
+      add_header X-Cache-Status \$upstream_cache_status;
+    }
     location /dl-cdn.alpinelinux.org/ {
       rewrite ^/dl-cdn.alpinelinux.org/(.*)\$ /\$1 break;
       try_files \$uri @mirror;
@@ -334,6 +341,7 @@ RUN install -Dm644 /dev/stdin ${STAGING_DIR}/var/www/htdocs/x86_64-efi/boot.ipxe
 #!ipxe
 menu Network Boot Menu
 item --key a alpine Alpine Linux
+item --key o omarchy Omarchy 4.0.1
 item --key t templeos Temple OS (Alpine Linux + QEMU)
 item --key d alpine-dev Alpine Linux - Development
 item --key s shell iPXE shell
@@ -382,6 +390,17 @@ kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netb
   ntp=pool.ntp.org \
   ip=dhcp
 initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
+boot
+
+:omarchy
+echo Booting Omarchy 4.0.1...
+kernel http://${PXE_SERVER}/omarchy/arch/boot/x86_64/vmlinuz-linux-t2 \
+  archisobasedir=arch \
+  archiso_http_srv=http://${PXE_SERVER_IP}/omarchy/ \
+  cms_verify=y \
+  initramfs_async=0 \
+  ip=dhcp
+initrd http://${PXE_SERVER_IP}/omarchy/arch/boot/x86_64/initramfs-linux-t2.img
 boot
 
 :shell
