@@ -492,22 +492,22 @@ configure_tui() {
     local value old_rw
     old_rw="$EXPORT_RW"
 
-    value="$(whiptail --inputbox 'PXE server IPv4 address' 10 72 "$PXE_SERVER_IP" 3>&1 1>&2 2>&3)" || return
+    value="$(whiptail --inputbox 'PXE server IPv4 address' 10 72 "$PXE_SERVER_IP" 3>&1 1>&2 2>&3)" || return 0
     PXE_SERVER_IP="$value"
-    value="$(whiptail --inputbox 'PXE client network (CIDR)' 10 72 "$PXE_NETWORK" 3>&1 1>&2 2>&3)" || return
+    value="$(whiptail --inputbox 'PXE client network (CIDR)' 10 72 "$PXE_NETWORK" 3>&1 1>&2 2>&3)" || return 0
     PXE_NETWORK="$value"
-    value="$(whiptail --inputbox 'Read-only NFS export' 10 78 "$EXPORT_RO" 3>&1 1>&2 2>&3)" || return
+    value="$(whiptail --inputbox 'Read-only NFS export' 10 78 "$EXPORT_RO" 3>&1 1>&2 2>&3)" || return 0
     EXPORT_RO="$value"
-    value="$(whiptail --inputbox 'Read-write NFS export' 10 78 "$EXPORT_RW" 3>&1 1>&2 2>&3)" || return
+    value="$(whiptail --inputbox 'Read-write NFS export' 10 78 "$EXPORT_RW" 3>&1 1>&2 2>&3)" || return 0
     EXPORT_RW="$value"
 
     if [[ "$SAMBA_ROOT" == "$old_rw/samba" ]]; then
         SAMBA_ROOT="$EXPORT_RW/samba"
     fi
 
-    value="$(whiptail --inputbox 'Server-only backup directory' 10 78 "$BACKUP_DIR" 3>&1 1>&2 2>&3)" || return
+    value="$(whiptail --inputbox 'Server-only backup directory' 10 78 "$BACKUP_DIR" 3>&1 1>&2 2>&3)" || return 0
     BACKUP_DIR="$value"
-    value="$(whiptail --inputbox 'Samba directory (inside RW export)' 10 78 "$SAMBA_ROOT" 3>&1 1>&2 2>&3)" || return
+    value="$(whiptail --inputbox 'Samba directory (inside RW export)' 10 78 "$SAMBA_ROOT" 3>&1 1>&2 2>&3)" || return 0
     SAMBA_ROOT="$value"
 
     validate_config
@@ -525,7 +525,7 @@ optional_services_tui() {
     result="$(whiptail --title 'Optional services' --checklist \
         'Select services to enable' 14 72 4 \
         samba 'Samba file sharing' "$state" \
-        3>&1 1>&2 2>&3)" || return
+        3>&1 1>&2 2>&3)" || return 0
 
     if [[ "$result" == *samba* ]]; then ENABLE_SAMBA=1; else ENABLE_SAMBA=0; fi
 
@@ -546,7 +546,7 @@ downloads_tui() {
             verify-omarchy 'Verify existing Omarchy ISO' \
             extract-omarchy 'Re-extract existing Omarchy ISO' \
             back 'Back' \
-            3>&1 1>&2 2>&3)" || return
+            3>&1 1>&2 2>&3)" || return 0
 
         case "$choice" in
             templeos) download_templeos; pause ;;
@@ -576,7 +576,7 @@ Backup:       $BACKUP_DIR
 TempleOS:     $(status_word templeos_ready)
 Omarchy:      $(status_word omarchy_ready)
 NFS:          $nfs
-Samba:        $samba" 21 78
+Samba:        $samba" 21 78 || true
 }
 
 start_services() {
