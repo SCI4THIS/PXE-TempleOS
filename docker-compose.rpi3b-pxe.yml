@@ -4,6 +4,7 @@ services:
       - "${EXPORT_RO}:/var/www/htdocs/media:ro"
       - ./nginx/runtime-start.sh:/rpi3b-pxe-start.sh:ro
       - ./nginx/runtime-nginx.conf:/rpi3b-pxe-nginx.conf:ro
+      - "${BOOT_IPXE_HOST}:/rpi3b-pxe-boot.ipxe:ro"
     command: ["/rpi3b-pxe-start.sh"]
 
   samba:

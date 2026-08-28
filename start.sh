@@ -5,7 +5,7 @@ PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}/rpi3b-pxe"
 CONFIG_FILE="$CONFIG_HOME/config.env"
 DOCKER_ENV="$PROJECT_ROOT/.env"
-BOOT_IPXE="$PROJECT_ROOT/nginx/www/x86_64-efi/boot.ipxe"
+BOOT_IPXE="$CONFIG_HOME/boot.ipxe"
 COMPOSE_BASE="$PROJECT_ROOT/docker-compose.yml"
 COMPOSE_LAYER="$PROJECT_ROOT/docker-compose.rpi3b-pxe.yml"
 NFS_EXPORTS_FILE="/etc/exports.d/rpi3b-pxe.exports"
@@ -228,6 +228,7 @@ UID=$(id -u)
 GID=$(id -g)
 EXPORT_RO=$EXPORT_RO
 SAMBA_ROOT=$SAMBA_ROOT
+BOOT_IPXE_HOST=$BOOT_IPXE
 __ENV__
 }
 
@@ -382,7 +383,7 @@ sync_backup() {
 generate_boot_ipxe() {
     local tmp
     mkdir -p "$(dirname "$BOOT_IPXE")"
-    tmp="$(mktemp)"
+    tmp="$(mktemp "${BOOT_IPXE}.tmp.XXXXXX")"
 
     {
         cat <<__MENU__
