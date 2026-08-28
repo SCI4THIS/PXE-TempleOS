@@ -235,7 +235,7 @@ __ENV__
 templeos_iso() { printf '%s/templeos/TempleOS.ISO\n' "$EXPORT_RO"; }
 templeos_part() { printf '%s.part\n' "$(templeos_iso)"; }
 templeos_marker() { printf '%s.complete\n' "$(templeos_iso)"; }
-templeos_ready() { [[ -s "$(templeos_iso)" && -f "$(templeos_marker)" ]]; }
+templeos_ready() { [[ -s "$(templeos_iso)" ]]; }
 
 omarchy_root() { printf '%s/omarchy\n' "$EXPORT_RO"; }
 omarchy_iso() { printf '%s/omarchy-%s.iso\n' "$(omarchy_root)" "$OMARCHY_VERSION"; }
@@ -276,7 +276,9 @@ omarchy_tree_ready() {
     done < <(omarchy_required_files)
 }
 
-omarchy_ready() { omarchy_iso_verified && omarchy_tree_ready; }
+# Boot readiness is determined by the extracted files themselves.  The source
+# ISO may be deleted after extraction without disabling an otherwise valid boot.
+omarchy_ready() { omarchy_tree_ready; }
 
 status_word() {
     if "$@"; then printf 'READY'; else printf 'MISSING/INCOMPLETE'; fi
@@ -388,6 +390,22 @@ generate_boot_ipxe() {
     {
         cat <<__MENU__
 #!ipxe
+
+# Probe tiny readiness endpoints on every PXE boot.  nginx checks the actual
+# files behind the configured RO export, so stale markers cannot expose an
+# invalid menu entry.
+set templeos_ready 0
+imgfetch --name templeos-ready http://${PXE_SERVER_IP}/ready/templeos && set templeos_ready 1 ||
+imgfree templeos-ready ||
+
+set omarchy_ready 0
+imgfetch --name omarchy-ready http://${PXE_SERVER_IP}/ready/omarchy && set omarchy_ready 1 ||
+imgfree omarchy-ready ||
+
+set tinycore_ready 0
+imgfetch --name tinycore-ready http://${PXE_SERVER_IP}/ready/tinycore && set tinycore_ready 1 ||
+imgfree tinycore-ready ||
+
 menu RPI3B+PXE Network Boot Menu
 item --key a alpine Alpine Linux
 __MENU__
@@ -395,15 +413,12 @@ __MENU__
         if [[ "$ENABLE_SAMBA" == 1 ]]; then
             echo 'item --key d alpine-dev Alpine Linux - Development'
         fi
-        if templeos_ready; then
-            echo 'item --key t templeos Temple OS (Alpine Linux + QEMU)'
-        fi
-        if omarchy_ready; then
-            echo "item --key o omarchy Omarchy $OMARCHY_VERSION"
-        fi
 
         cat <<__MENU__
 item --key c tinycore Tiny Core Linux
+iseq \${templeos_ready} 1 && item --key t templeos Temple OS (Alpine Linux + QEMU) ||
+iseq \${omarchy_ready} 1 && item --key o omarchy Omarchy $OMARCHY_VERSION ||
+iseq \${tinycore_ready} 1 && item --key c tinycore Tiny Core Linux ||
 item --key s shell iPXE shell
 choose --default alpine target || goto alpine
 goto \${target}
@@ -444,8 +459,7 @@ boot
 __MENU__
         fi
 
-        if templeos_ready; then
-            cat <<__MENU__
+        cat <<__MENU__
 
 :templeos
 echo Booting TempleOS...
@@ -458,11 +472,6 @@ kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netb
   ip=dhcp
 initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
 boot
-__MENU__
-        fi
-
-        if omarchy_ready; then
-            cat <<__MENU__
 
 :omarchy
 echo Booting Omarchy $OMARCHY_VERSION...
@@ -477,7 +486,6 @@ kernel http://${PXE_SERVER_IP}/media/omarchy/arch/boot/x86_64/vmlinuz-linux-t2 \
 initrd http://${PXE_SERVER_IP}/media/omarchy/arch/boot/x86_64/initramfs-linux-t2.img
 boot
 __MENU__
-        fi
 
         cat <<'__MENU__'
 
@@ -602,9 +610,24 @@ start_services() {
 stop_services() { compose down; }
 
 show_logs() {
+    local rc
     clear_screen
-    compose logs --tail=120
-    pause
+    log "Streaming Docker logs.  Press Ctrl+C to return to the menu."
+    log
+
+    # docker compose logs -f normally exits with 130 after Ctrl+C.  Do not let
+    # that expected status escape this function under `set -e`.
+    set +e
+    compose logs --follow --tail=120
+    rc=$?
+    set -e
+
+    if [[ "$rc" -ne 0 && "$rc" -ne 130 ]]; then
+      log
+      log "Docker log stream exited with status $rc."
+      pause
+    fi
+    return 0
 }
 
 tui() {
