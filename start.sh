@@ -37,6 +37,12 @@ pause() {
     read -r _
 }
 
+clear_screen() {
+    # Avoid ncurses/terminfo so SSH works even when the server does not know
+    # the client's TERM value (for example, xterm-kitty).
+    printf '\033[2J\033[H'
+}
+
 detect_ip() {
     hostname -I 2>/dev/null | awk '{print $1}'
 }
@@ -290,7 +296,7 @@ download_with_resume() {
 }
 
 download_templeos() {
-    clear
+    clear_screen
     log "Downloading TempleOS..."
     download_with_resume "$TEMPLEOS_URL" "$(templeos_iso)" "$(templeos_part)" "$(templeos_marker)"
     generate_boot_ipxe
@@ -335,7 +341,7 @@ extract_omarchy() {
 
 download_omarchy() {
     local url
-    clear
+    clear_screen
     url="$OMARCHY_URL_BASE/omarchy-${OMARCHY_VERSION}.iso"
     rm -f "$(omarchy_sha_cache)" "$(omarchy_extract_marker)"
     log "Downloading Omarchy $OMARCHY_VERSION..."
@@ -545,8 +551,8 @@ downloads_tui() {
         case "$choice" in
             templeos) download_templeos; pause ;;
             omarchy) download_omarchy; pause ;;
-            verify-omarchy) clear; verify_omarchy; generate_boot_ipxe; pause ;;
-            extract-omarchy) clear; extract_omarchy; pause ;;
+            verify-omarchy) clear_screen; verify_omarchy; generate_boot_ipxe; pause ;;
+            extract-omarchy) clear_screen; extract_omarchy; pause ;;
             back) return ;;
         esac
     done
@@ -595,7 +601,7 @@ start_services() {
 stop_services() { compose down; }
 
 show_logs() {
-    clear
+    clear_screen
     compose logs --tail=120
     pause
 }
@@ -626,11 +632,11 @@ tui() {
             status) show_status ;;
             config) configure_tui ;;
             downloads) downloads_tui ;;
-            nfs) clear; nfs_configure; run_root exportfs -v; pause ;;
+            nfs) clear_screen; nfs_configure; run_root exportfs -v; pause ;;
             optional) optional_services_tui ;;
-            backup) clear; sync_backup; log "RW export synchronized to $BACKUP_DIR/rw"; pause ;;
-            start) clear; start_services; compose ps; pause ;;
-            stop) clear; stop_services; pause ;;
+            backup) clear_screen; sync_backup; log "RW export synchronized to $BACKUP_DIR/rw"; pause ;;
+            start) clear_screen; start_services; compose ps; pause ;;
+            stop) clear_screen; stop_services; pause ;;
             logs) show_logs ;;
             exit) exit 0 ;;
         esac
