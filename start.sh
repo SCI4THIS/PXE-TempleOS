@@ -89,29 +89,43 @@ hash_stream() {
     sha256sum | awk '{print $1 }'
 }
 
+
 build_inputs_hash() {
     {
-      printf 'PXE_SERVER_IP=%s\n' "$PXE_SERVER_IP"
-      printf 'UID=%s\n' "$(id -u)"
-      printf 'GID=%s\n' "$(id -g)"
-      printf 'ENABLE_SAMBA=%s\n' "$ENABLE_SAMBA"
+        printf 'PXE_SERVER_IP=%s\n' "$PXE_SERVER_IP"
+        printf 'UID=%s\n' "$(id -u)"
+        printf 'GID=%s\n' "$(id -g)"
+        printf 'ENABLE_SAMBA=%s\n' "$ENABLE_SAMBA"
 
-      # Hash the actual Docker build contexts while excluding directories that
-      # are runtime data/bind mounts rather than image build inputs.
-      find \
-          "$PROJECT_ROOT/dnsmasq" \
-          "$PROJECT_ROOT/nginx/www/*" \
-	  "$PROJECT_ROOT/samba/shared/*" \
-	  -type f \
-	  ! -path "$PROJECT_ROOT/dnsmasq/tftp/*" \
-	  ! -path "$PROJECT_ROOT/nginx/www/*" \
-	  ! -path "$PROJECT_ROOT/samba/shared/*" \
-	  -print0 2>/dev/null |
-	  sort -z |
-	  while IFS= read -r -d '' file; do
-              printf 'FILE %s\n' "${file#"$PROJECT_ROOT"/}"
-	      sha256sum "$file"
-          done
+        # Hash Docker build inputs, but do not descend into runtime/bind-mounted
+        # data. runtime-*.conf/sh are bind-mounted and are handled separately by
+        # runtime_inputs_hash().
+        find \
+            "$PROJECT_ROOT/dnsmasq" \
+            "$PROJECT_ROOT/nginx" \
+            "$PROJECT_ROOT/samba" \
+            \( \
+                -path "$PROJECT_ROOT/dnsmasq/tftp" -o \
+                -path "$PROJECT_ROOT/nginx/www" -o \
+                -path "$PROJECT_ROOT/samba/shared" \
+            \) -prune -o \
+            -type f \
+            ! -path "$PROJECT_ROOT/nginx/runtime-start.sh" \
+            ! -path "$PROJECT_ROOT/nginx/runtime-nginx.conf" \
+            -print0 |
+            sort -z |
+            while IFS= read -r -d '' file; do
+                printf 'FILE %s\n' "${file#"$PROJECT_ROOT"/}"
+                sha256sum "$file"
+            done
+
+        # Compose files can change build contexts, arguments, or Dockerfiles.
+        for file in "$COMPOSE_BASE" "$COMPOSE_LAYER"; do
+            if [[ -f "$file" ]]; then
+                printf 'FILE %s\n' "${file#"$PROJECT_ROOT"/}"
+                sha256sum "$file"
+            fi
+        done
     } | hash_stream
 }
 
@@ -337,7 +351,6 @@ omarchy_iso_verified() {
 omarchy_tree_ready() {
     local root file
     root="$(omarchy_root)"
-    [[ -f "$(omarchy_extract_marker)" ]] || return 1
     while IFS= read -r file; do
         [[ -s "$root/$file" ]] || return 1
     done < <(omarchy_required_files)
@@ -482,7 +495,6 @@ __MENU__
         fi
 
         cat <<__MENU__
-item --key c tinycore Tiny Core Linux
 iseq \${templeos_ready} 1 && item --key t templeos Temple OS (Alpine Linux + QEMU) ||
 iseq \${omarchy_ready} 1 && item --key o omarchy Omarchy $OMARCHY_VERSION ||
 iseq \${tinycore_ready} 1 && item --key c tinycore Tiny Core Linux ||
