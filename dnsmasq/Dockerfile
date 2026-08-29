@@ -1,3 +1,27 @@
+FROM debian:bookworm-slim AS ipxe-builder
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        binutils-i686-linux-gnu \
+        binutils-x86-64-linux-gnu \
+        build-essential \
+        gcc-i686-linux-gnu \
+        gcc-x86-64-linux-gnu \
+        perl \
+        python3 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src/ipxe
+COPY ipxe-src/ ./
+
+RUN make -C src -j"$(nproc)" \
+        CROSS_COMPILE=i686-linux-gnu- \
+        bin/ipxe.pxe \
+        bin/undionly.kpxe \
+    && make -C src -j"$(nproc)" \
+        CROSS_COMPILE=x86_64-linux-gnu- \
+        bin-x86_64-efi/ipxe.efi
+
 FROM alpine:3.20
 
 RUN apk add --no-cache dnsmasq
@@ -5,6 +29,13 @@ RUN apk add --no-cache dnsmasq
 ARG PXE_SERVER_IP
 ENV STAGING_DIR=/tmp/staging
 ENV NETWORK="${PXE_SERVER_IP%.*}.0"
+
+COPY --from=ipxe-builder /usr/src/ipxe/src/bin/ipxe.pxe \
+    ${STAGING_DIR}/tftpboot/x86_64-pcbios/ipxe.pxe
+COPY --from=ipxe-builder /usr/src/ipxe/src/bin/undionly.kpxe \
+    ${STAGING_DIR}/tftpboot/x86_64-pcbios/undionly.kpxe
+COPY --from=ipxe-builder /usr/src/ipxe/src/bin-x86_64-efi/ipxe.efi \
+    ${STAGING_DIR}/tftpboot/x86_64-efi/ipxe.efi
 
 RUN install -Dm644 /dev/stdin ${STAGING_DIR}/etc/dnsmasq.conf <<EOF
 port=0
@@ -16,7 +47,7 @@ dhcp-host=00:21:70:f3:ed:f0,set:problemnic
 
 
 dhcp-boot=tag:!problemnic,tag:!ipxe,x86_64-pcbios/undionly.kpxe,,${PXE_SERVER_IP}
-dhcp-boot=tag:problemnic,tag:!ipxe,x86_64-pcbios/undionly.kpxe,,${PXE_SERVER_IP}
+dhcp-boot=tag:problemnic,tag:!ipxe,x86_64-pcbios/ipxe.pxe,,${PXE_SERVER_IP}
 dhcp-boot=tag:ipxe,x86_64-efi/autoexec.ipxe,,${PXE_SERVER_IP}
 
 pxe-service=X86-64_EFI,"UEFI PXE Boot",x86_64-efi/ipxe.efi
