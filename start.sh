@@ -7,6 +7,8 @@ CONFIG_FILE="$CONFIG_HOME/config.env"
 DOCKER_ENV="$PROJECT_ROOT/.env"
 RUNTIME_HOME="$CONFIG_HOME/runtime"
 BOOT_IPXE="$RUNTIME_HOME/boot.ipxe"
+REPAIR_OVERLAY_SOURCE="$PROJECT_ROOT/nginx/omarchy-repair-overlay-src"
+REPAIR_APKOVL="$RUNTIME_HOME/omarchy-repair-apkovl.tar.gz"
 
 COMPOSE_BASE="$PROJECT_ROOT/docker-compose.yml"
 COMPOSE_LAYER="$PROJECT_ROOT/docker-compose.rpi3b-pxe.yml"
@@ -116,6 +118,7 @@ build_inputs_hash() {
             \( \
                 -path "$PROJECT_ROOT/dnsmasq/tftp" -o \
                 -path "$PROJECT_ROOT/nginx/www" -o \
+                -path "$REPAIR_OVERLAY_SOURCE" -o \
                 -path "$PROJECT_ROOT/samba/shared" \
             \) -prune -o \
             -type f \
@@ -156,6 +159,17 @@ runtime_inputs_hash() {
                 sha256sum "$file"
             fi
         done
+
+        find "$REPAIR_OVERLAY_SOURCE" -type f -o -type l 2>/dev/null |
+            sort |
+            while IFS= read -r file; do
+                printf 'FILE %s\n' "${file#"$PROJECT_ROOT"/}"
+                if [[ -L "$file" ]]; then
+                    readlink "$file"
+                else
+                    sha256sum "$file"
+                fi
+            done
     } | hash_stream
 }
 
@@ -693,9 +707,38 @@ After promotion, PXE shows Omarchy - NFS. Its root is RO NFS + a RAM overlay; /h
         24 78 || true
 }
 
+generate_repair_apkovl() {
+    local tmp
+
+    [[ -d "$REPAIR_OVERLAY_SOURCE" ]] ||
+        die "Boot-repair overlay source is missing: $REPAIR_OVERLAY_SOURCE"
+
+    mkdir -p "$RUNTIME_HOME"
+    chmod 0755 "$RUNTIME_HOME"
+    tmp="$(mktemp "${REPAIR_APKOVL}.tmp.XXXXXX")"
+
+    # APKoVL archives are rooted at / and must preserve the OpenRC runlevel
+    # symlink. Fixed metadata keeps this generated runtime asset reproducible.
+    if ! tar \
+        --sort=name \
+        --mtime='@0' \
+        --owner=0 \
+        --group=0 \
+        --numeric-owner \
+        -C "$REPAIR_OVERLAY_SOURCE" \
+        -cf - . | gzip -n >"$tmp"; then
+        rm -f "$tmp"
+        die "Unable to generate $REPAIR_APKOVL"
+    fi
+
+    chmod 0644 "$tmp"
+    mv -f "$tmp" "$REPAIR_APKOVL"
+}
+
 generate_boot_ipxe() {
     local tmp
 
+    generate_repair_apkovl
     mkdir -p "$RUNTIME_HOME"
     chmod 0755 "$RUNTIME_HOME"
     tmp="$(mktemp "${BOOT_IPXE}.tmp.XXXXXX")"
@@ -819,7 +862,7 @@ echo Booting Omarchy Boot Repair...
 kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
   modules=loop,squashfs,btrfs,dm-crypt quiet nomodeset \
   alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
-  apkovl=http://${PXE_SERVER_IP}/rpi3b-pxe-extra/omarchy-repair-apkovl.tar.gz \
+  apkovl=http://${PXE_SERVER_IP}/omarchy-repair-apkovl.tar.gz \
   modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
   pkgs=bash,newt,cryptsetup,btrfs-progs,grub-bios,lsblk,blkid,findmnt,mount,umount,sfdisk,kbd \
   ntp=pool.ntp.org \
