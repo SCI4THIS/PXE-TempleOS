@@ -31,16 +31,19 @@ PREPARED=0
 READWRITE=0
 
 msg() {
-    whiptail --title "$TITLE" --msgbox "$1" 20 78 || true
+    whiptail --title "$TITLE" --msgbox "$1" 20 76 || true
 }
 
 error_msg() {
-    whiptail --title "$TITLE - Error" --msgbox "$1" 20 78 || true
+    whiptail --title "$TITLE - Error" --msgbox "$1" 20 76 || true
 }
 
 textbox() {
     local heading="$1" file="$2"
-    whiptail --title "$heading" --scrolltext --textbox "$file" 28 96
+    # The PXE virtual console is commonly 80x25. Keep the dialog inside that
+    # viewport; newt centers oversized dialogs at a negative column and clips
+    # their left edge.
+    whiptail --title "$heading" --scrolltext --textbox "$file" 22 76
 }
 
 is_mounted() {
@@ -99,7 +102,7 @@ select_disk() {
     choice="$(
         whiptail --title "$TITLE" --menu \
             "Select the disk containing the Omarchy installation." \
-            20 88 10 "${menu[@]}" \
+            20 76 10 "${menu[@]}" \
             3>&1 1>&2 2>&3
     )" || return 1
 
@@ -130,7 +133,7 @@ select_partition_from_candidates() {
 
     choice="$(
         whiptail --title "$TITLE" --menu "$prompt" \
-            20 88 10 "${menu[@]}" \
+            20 76 10 "${menu[@]}" \
             3>&1 1>&2 2>&3
     )" || return 1
 
@@ -179,7 +182,7 @@ unlock_root() {
     pass="$(
         whiptail --title "$TITLE" --passwordbox \
             "Enter the LUKS passphrase for $LUKS_PART.\n\nThe passphrase is used only for this rescue session." \
-            13 78 \
+            13 76 \
             3>&1 1>&2 2>&3
     )" || return 1
 
@@ -259,7 +262,7 @@ select_file() {
 
     choice="$(
         whiptail --title "$TITLE" --menu "$prompt" \
-            22 96 12 "${menu[@]}" \
+            22 76 12 "${menu[@]}" \
             3>&1 1>&2 2>&3
     )" || return 1
 
@@ -652,7 +655,7 @@ No changes were made."
 Limine files are left in /boot.
 
 Proceed to the final confirmation?" \
-        22 82; then
+        22 76; then
         rm -f "$cfg"
         return 0
     fi
