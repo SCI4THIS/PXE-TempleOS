@@ -75,7 +75,7 @@ Clients then share an immutable NFS system tree. Changes outside `/home` live on
 
 Some legacy BIOS systems can complete an Omarchy installation but fail to boot through Limine. **Omarchy - Boot Repair** exists so the machine can recover without another rescue USB: PXE supplies an Alpine environment, all required disk/encryption/GRUB tools, and the repair UI directly from this server.
 
-The repair flow discovers the disk, FAT `/boot`, LUKS root, Btrfs `@` subvolume, installed kernel/initramfs, CPU microcode, and whether mkinitcpio uses `encrypt` or `sd-encrypt`. Use **Diagnostics** first, then **Dry Run** to inspect and validate the proposed `grub.cfg` and `grub-install` command. The **Commit** action requires two confirmations, backs up boot metadata and existing loader configuration, installs BIOS GRUB, and writes matching LUKS kernel arguments.
+The repair flow discovers the disk, FAT `/boot`, LUKS2 root, Btrfs `@` subvolume, installed kernel/initramfs, CPU microcode, and whether mkinitcpio uses `encrypt` or `sd-encrypt`. Ambiguous hook configurations are rejected instead of guessed. Use **Diagnostics** first, then **Dry Run** to inspect and validate the proposed `grub.cfg` and `grub-install` command. The **Commit** action requires two confirmations, backs up boot metadata and existing loader configuration, installs BIOS GRUB, and writes matching LUKS kernel arguments.
 
 Automatic commit is intentionally limited to the tested **legacy BIOS + MBR/dos + FAT `/boot` + LUKS2 + Btrfs `@`** layout. UEFI and GPT targets can be diagnosed but are refused for writes. See [`docs/omarchy-boot-repair.md`](docs/omarchy-boot-repair.md) for the exact workflow and safety boundaries.
 

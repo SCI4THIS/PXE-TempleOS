@@ -15,7 +15,9 @@ PTTYPE=""
 BOOT_MODE=""
 BOOT_UUID=""
 LUKS_UUID=""
+LUKS_VERSION=""
 ENCRYPT_HOOK=""
+ENCRYPT_HOOK_ERROR=""
 CRYPT_ARGS=""
 VMLINUX=""
 INITRAMFS=""
@@ -217,25 +219,38 @@ This repair tool currently expects the standard Omarchy Btrfs root subvolume nam
 detect_hook() {
     local -a configs
     local hooks=""
+    local has_encrypt=0 has_sd_encrypt=0
+
+    ENCRYPT_HOOK="UNKNOWN"
+    ENCRYPT_HOOK_ERROR=""
+    CRYPT_ARGS=""
 
     configs=("$ROOT/etc/mkinitcpio.conf")
     configs+=("$ROOT"/etc/mkinitcpio.conf.d/*.conf)
 
     for cfg in "${configs[@]}"; do
         [[ -f "$cfg" ]] || continue
-        hooks+="$(grep '^HOOKS=' "$cfg" 2>/dev/null || true)"$'\n'
+        hooks+="$(grep -E '^[[:space:]]*HOOKS=' "$cfg" 2>/dev/null || true)"$'\n'
     done
 
-    # Check sd-encrypt first. This distinction is the key part of the repair.
-    if grep -qw 'sd-encrypt' <<<"$hooks"; then
+    grep -Eq '(^|[[:space:](])sd-encrypt([[:space:])]|$)' <<<"$hooks" &&
+        has_sd_encrypt=1
+    grep -Eq '(^|[[:space:](])encrypt([[:space:])]|$)' <<<"$hooks" &&
+        has_encrypt=1
+
+    # mkinitcpio configuration may contain overrides in drop-ins. Do not guess
+    # which encryption scheme is effective when conflicting declarations exist.
+    if (( has_encrypt && has_sd_encrypt )); then
+        ENCRYPT_HOOK_ERROR="Conflicting encrypt and sd-encrypt hooks were found in mkinitcpio configuration"
+        return 1
+    elif (( has_sd_encrypt )); then
         ENCRYPT_HOOK="sd-encrypt"
         CRYPT_ARGS="rd.luks.name=${LUKS_UUID}=root root=/dev/mapper/root"
-    elif grep -qw 'encrypt' <<<"$hooks"; then
+    elif (( has_encrypt )); then
         ENCRYPT_HOOK="encrypt"
         CRYPT_ARGS="cryptdevice=UUID=${LUKS_UUID}:root root=/dev/mapper/root"
     else
-        ENCRYPT_HOOK="UNKNOWN"
-        CRYPT_ARGS=""
+        ENCRYPT_HOOK_ERROR="No encrypt or sd-encrypt hook was found in mkinitcpio configuration"
         return 1
     fi
 }
@@ -417,6 +432,8 @@ prepare_target() {
 
     BOOT_UUID="$(blkid -s UUID -o value "$BOOT_PART" 2>/dev/null || true)"
     LUKS_UUID="$(blkid -s UUID -o value "$LUKS_PART" 2>/dev/null || true)"
+    LUKS_VERSION="$(cryptsetup luksDump "$LUKS_PART" 2>/dev/null |
+        awk '$1 == "Version:" {print $2; exit}' || true)"
 
     [[ -n "$BOOT_UUID" && -n "$LUKS_UUID" ]] || {
         error_msg "Unable to read the boot or LUKS UUID."
@@ -445,7 +462,9 @@ diagnostic_report() {
     [[ "$PTTYPE" == "dos" ]] ||
         eligibility="NO - automatic Commit currently supports MBR/dos disks only"
     [[ "$ENCRYPT_HOOK" != "UNKNOWN" ]] ||
-        eligibility="NO - mkinitcpio encryption hook was not detected"
+        eligibility="NO - ${ENCRYPT_HOOK_ERROR:-mkinitcpio encryption hook was not detected}"
+    [[ "$LUKS_VERSION" == "2" ]] ||
+        eligibility="NO - automatic Commit requires LUKS2 (detected ${LUKS_VERSION:-unknown})"
 
     cat >"$report" <<EOF
 Omarchy Boot Repair diagnostics
@@ -466,6 +485,7 @@ Boot partition:
 Encrypted root:
   Device:             $LUKS_PART
   LUKS UUID:          $LUKS_UUID
+  LUKS version:       ${LUKS_VERSION:-unknown}
   Mapper:             $MAP_DEV
   Btrfs subvolume:    @
 
@@ -540,7 +560,9 @@ dry_run() {
 
     if [[ "$ENCRYPT_HOOK" == "UNKNOWN" ]]; then
         error_msg \
-"Dry Run cannot generate a safe menu because neither encrypt nor sd-encrypt was detected in mkinitcpio HOOKS."
+"Dry Run cannot generate a safe menu.
+
+${ENCRYPT_HOOK_ERROR:-Neither encrypt nor sd-encrypt was detected in mkinitcpio HOOKS.}"
         return 0
     fi
 
@@ -628,7 +650,19 @@ No changes were made."
 
     if [[ "$ENCRYPT_HOOK" == "UNKNOWN" ]]; then
         error_msg \
-"Neither encrypt nor sd-encrypt could be detected in mkinitcpio HOOKS.
+"A single encryption hook could not be established safely.
+
+${ENCRYPT_HOOK_ERROR:-Neither encrypt nor sd-encrypt could be detected in mkinitcpio HOOKS.}
+
+No changes were made."
+        return 0
+    fi
+
+    if [[ "$LUKS_VERSION" != "2" ]]; then
+        error_msg \
+"This automatic repair supports only LUKS2 encrypted roots.
+
+Detected LUKS version: ${LUKS_VERSION:-unknown}
 
 No changes were made."
         return 0
@@ -753,6 +787,7 @@ reset_target() {
     TARGET_DISK=""
     BOOT_PART=""
     LUKS_PART=""
+    LUKS_VERSION=""
     CURRENT_GRUB_STATUS="Not checked"
     CURRENT_BOOT_LOADER="Not checked"
     CURRENT_BOOT_DETAILS="Target has not been inspected"

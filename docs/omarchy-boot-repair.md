@@ -35,6 +35,8 @@ It is not stored in the bind-mounted `nginx/www` working-data directory.
    - Mounts Btrfs `@` and `/boot` read-only.
    - Reads UUIDs directly from disk.
    - Detects `encrypt` versus `sd-encrypt` from `mkinitcpio` configuration.
+   - Refuses ambiguous configurations containing both encryption hooks.
+   - Verifies the encrypted root is LUKS2 before enabling Commit.
    - Finds the installed kernel, initramfs and CPU microcode.
    - Checks whether an existing GRUB configuration matches the detected hook.
    - Shows the detected boot loader in the main menu (`Limine`, `GRUB`, or
@@ -80,6 +82,8 @@ manually.
 
 The Commit action currently refuses UEFI systems and refuses GPT disks.
 The tested repair case is legacy BIOS + MBR/dos + FAT `/boot` + LUKS2 + Btrfs `@`.
+It also refuses LUKS1, an unknown LUKS version, and ambiguous mkinitcpio
+configurations containing both `encrypt` and `sd-encrypt` declarations.
 
 Diagnostics and Dry Run remain useful on other layouts, but do not commit
 changes automatically.
