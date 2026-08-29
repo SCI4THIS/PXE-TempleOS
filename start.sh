@@ -106,6 +106,7 @@ build_inputs_hash() {
         printf 'UID=%s\n' "$(id -u)"
         printf 'GID=%s\n' "$(id -g)"
         printf 'ENABLE_SAMBA=%s\n' "$ENABLE_SAMBA"
+        printf 'OMARCHY_NFS_BUILD_EXPORT=%s\n' "$OMARCHY_NFS_BUILD_EXPORT"
 
         # Hash Docker build inputs, not runtime/bind-mounted data.
         find \
@@ -241,6 +242,7 @@ write_default_config() {
         printf 'BACKUP_DIR=%q\n' "$DEFAULT_BACKUP_DIR"
         printf 'SAMBA_ROOT=%q\n' "$DEFAULT_EXPORT_RW/samba"
         printf 'ENABLE_SAMBA=0\n'
+        printf 'OMARCHY_NFS_BUILD_EXPORT=0\n'
         printf 'OMARCHY_VERSION=%q\n' "$DEFAULT_OMARCHY_VERSION"
     } >"$CONFIG_FILE"
 }
@@ -259,6 +261,7 @@ load_config() {
     : "${BACKUP_DIR:?BACKUP_DIR is missing from config}"
     : "${SAMBA_ROOT:?SAMBA_ROOT is missing from config}"
     : "${ENABLE_SAMBA:=0}"
+    : "${OMARCHY_NFS_BUILD_EXPORT:=0}"
     : "${OMARCHY_VERSION:=$DEFAULT_OMARCHY_VERSION}"
 }
 
@@ -272,6 +275,7 @@ save_config() {
         printf 'BACKUP_DIR=%q\n' "$BACKUP_DIR"
         printf 'SAMBA_ROOT=%q\n' "$SAMBA_ROOT"
         printf 'ENABLE_SAMBA=%q\n' "$ENABLE_SAMBA"
+        printf 'OMARCHY_NFS_BUILD_EXPORT=%q\n' "$OMARCHY_NFS_BUILD_EXPORT"
         printf 'OMARCHY_VERSION=%q\n' "$OMARCHY_VERSION"
     } >"$CONFIG_FILE"
 }
@@ -408,6 +412,49 @@ omarchy_ready() {
     omarchy_tree_ready
 }
 
+omarchy_nfs_ro_root() {
+    printf '%s/omarchy-nfs/root\n' "$EXPORT_RO"
+}
+
+omarchy_nfs_build_export() {
+    printf '%s/omarchy-nfs-build\n' "$EXPORT_RW"
+}
+
+omarchy_nfs_build_root() {
+    printf '%s/root\n' "$(omarchy_nfs_build_export)"
+}
+
+omarchy_nfs_home() {
+    printf '%s/omarchy-home\n' "$EXPORT_RW"
+}
+
+omarchy_nfs_required_files() {
+    cat <<'__FILES__'
+.rpi3b-pxe-nfs-ready
+etc/os-release
+boot/vmlinuz-rpi3b-pxe
+boot/initramfs-rpi3b-pxe.img
+__FILES__
+}
+
+omarchy_nfs_build_ready() {
+    local root file
+    root="$(omarchy_nfs_build_root)"
+
+    while IFS= read -r file; do
+        [[ -e "$root/$file" ]] || return 1
+    done < <(omarchy_nfs_required_files)
+}
+
+omarchy_nfs_ready() {
+    local root file
+    root="$(omarchy_nfs_ro_root)"
+
+    while IFS= read -r file; do
+        [[ -e "$root/$file" ]] || return 1
+    done < <(omarchy_nfs_required_files)
+}
+
 status_word() {
     if "$@"; then
         printf 'READY'
@@ -533,11 +580,21 @@ nfs_configure() {
     ensure_directories
 
     tmp="$(mktemp)"
-    cat >"$tmp" <<__EXPORTS__
+    {
+        cat <<__EXPORTS__
 # Managed by RPI3B+PXE. Edit through ./start.sh.
 $EXPORT_RO $PXE_NETWORK(ro,sync,root_squash,no_subtree_check)
 $EXPORT_RW $PXE_NETWORK(rw,sync,root_squash,no_subtree_check)
 __EXPORTS__
+
+        if [[ "$OMARCHY_NFS_BUILD_EXPORT" == 1 ]]; then
+            cat <<__EXPORTS__
+# TEMPORARY: required only while staging an Omarchy NFS root.
+# Disable this after the build is promoted to the RO export.
+$(omarchy_nfs_build_export) $PXE_NETWORK(rw,sync,no_subtree_check,no_root_squash)
+__EXPORTS__
+        fi
+    } >"$tmp"
 
     run_root mkdir -p /etc/exports.d
     run_root install -m 0644 "$tmp" "$NFS_EXPORTS_FILE"
@@ -557,6 +614,85 @@ sync_backup() {
     run_root rsync -a "$EXPORT_RW/" "$dest/"
 }
 
+promote_omarchy_nfs() {
+    local build ro home
+
+    build="$(omarchy_nfs_build_root)"
+    ro="$(omarchy_nfs_ro_root)"
+    home="$(omarchy_nfs_home)"
+
+    omarchy_nfs_build_ready ||
+        die "The Omarchy NFS build tree is not finalized yet: $build"
+
+    run_root mkdir -p "$ro" "$home"
+
+    # Seed persistent home directories without overwriting an existing user's
+    # files on later promotions.
+    if [[ -d "$build/home" ]]; then
+        run_root rsync -aHAX --numeric-ids --ignore-existing \
+            "$build/home/" "$home/"
+    fi
+
+    # Promote the prepared system as a shared read-only base. /home is excluded
+    # because clients mount the RW home export there after switch_root.
+    run_root rsync -aHAX --numeric-ids --delete \
+        --exclude='/dev/*' \
+        --exclude='/proc/*' \
+        --exclude='/sys/*' \
+        --exclude='/run/*' \
+        --exclude='/tmp/*' \
+        --exclude='/mnt/*' \
+        --exclude='/media/*' \
+        --exclude='/home/*' \
+        "$build/" "$ro/"
+
+    run_root mkdir -p "$ro/home"
+    generate_boot_ipxe
+
+    log "Omarchy NFS root promoted to:"
+    log "  $ro"
+    log "Persistent /home:"
+    log "  $home"
+}
+
+toggle_omarchy_nfs_build_export() {
+    if [[ "$OMARCHY_NFS_BUILD_EXPORT" == 1 ]]; then
+        OMARCHY_NFS_BUILD_EXPORT=0
+        log "Disabling temporary no_root_squash Omarchy build export..."
+    else
+        if ! whiptail --yesno \
+            "NFS build mode temporarily exports:\n\n$(omarchy_nfs_build_export)\n\nwith no_root_squash to $PXE_NETWORK.\n\nThis is intentionally privileged and should be disabled immediately after staging/finalizing the NFS root.\n\nEnable it?" \
+            18 78; then
+            return 0
+        fi
+        OMARCHY_NFS_BUILD_EXPORT=1
+        log "Enabling temporary no_root_squash Omarchy build export..."
+    fi
+
+    save_config
+    nfs_configure
+}
+
+show_omarchy_nfs_instructions() {
+    whiptail --title 'Omarchy - NFS build workflow' --msgbox \
+"1. Enable NFS Build Export here.
+
+2. On an x86_64 Omarchy installation, copy scripts/omarchy-nfs-stage.sh from this repo.
+
+3. Run:
+   sudo ./omarchy-nfs-stage.sh \\
+     --server $PXE_SERVER_IP \\
+     --build-export $(omarchy_nfs_build_export) \\
+     --home-export $(omarchy_nfs_home)
+
+4. Return here and choose Promote Build to RO.
+
+5. Disable NFS Build Export.
+
+After promotion, PXE shows Omarchy - NFS. Its root is RO NFS + a RAM overlay; /home is the RW NFS export." \
+        24 78 || true
+}
+
 generate_boot_ipxe() {
     local tmp
 
@@ -567,15 +703,18 @@ generate_boot_ipxe() {
     {
         cat <<__MENU__
 #!ipxe
-# Probe readiness endpoints on every PXE boot. nginx checks the actual files
-# currently mounted beneath the configured RO export.
+# Probe readiness endpoints on every PXE boot. nginx checks actual server files.
 set templeos_ready 0
 imgfetch --name templeos-ready http://${PXE_SERVER_IP}/ready/templeos && set templeos_ready 1 ||
 imgfree templeos-ready ||
 
-set omarchy_ready 0
-imgfetch --name omarchy-ready http://${PXE_SERVER_IP}/ready/omarchy && set omarchy_ready 1 ||
-imgfree omarchy-ready ||
+set omarchy_install_ready 0
+imgfetch --name omarchy-install-ready http://${PXE_SERVER_IP}/ready/omarchy-install && set omarchy_install_ready 1 ||
+imgfree omarchy-install-ready ||
+
+set omarchy_nfs_ready 0
+imgfetch --name omarchy-nfs-ready http://${PXE_SERVER_IP}/ready/omarchy-nfs && set omarchy_nfs_ready 1 ||
+imgfree omarchy-nfs-ready ||
 
 set tinycore_ready 0
 imgfetch --name tinycore-ready http://${PXE_SERVER_IP}/ready/tinycore && set tinycore_ready 1 ||
@@ -591,7 +730,8 @@ __MENU__
 
         cat <<__MENU__
 iseq \${templeos_ready} 1 && item --key t templeos Temple OS (Alpine Linux + QEMU) ||
-iseq \${omarchy_ready} 1 && item --key o omarchy Omarchy $OMARCHY_VERSION ||
+iseq \${omarchy_install_ready} 1 && item --key o omarchy-install Omarchy - Install ||
+iseq \${omarchy_nfs_ready} 1 && item --key n omarchy-nfs Omarchy - NFS ||
 iseq \${tinycore_ready} 1 && item --key c tinycore Tiny Core Linux ||
 item --key s shell iPXE shell
 
@@ -648,8 +788,8 @@ kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netb
 initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
 boot
 
-:omarchy
-echo Booting Omarchy $OMARCHY_VERSION...
+:omarchy-install
+echo Booting Omarchy installer...
 kernel http://${PXE_SERVER_IP}/media/omarchy/arch/boot/x86_64/vmlinuz-linux-t2 \\
   archisobasedir=omarchy/arch \\
   archiso_nfs_srv=${PXE_SERVER_IP}:${EXPORT_RO} \\
@@ -659,9 +799,18 @@ kernel http://${PXE_SERVER_IP}/media/omarchy/arch/boot/x86_64/vmlinuz-linux-t2 \
   BOOTIF=01-\${net0/mac:hexhyp}
 initrd http://${PXE_SERVER_IP}/media/omarchy/arch/boot/x86_64/initramfs-linux-t2.img
 boot
-__MENU__
 
-        cat <<'__MENU__'
+:omarchy-nfs
+echo Booting Omarchy from read-only NFS root...
+kernel http://${PXE_SERVER_IP}/media/omarchy-nfs/root/boot/vmlinuz-rpi3b-pxe \\
+  root=/dev/nfs \\
+  rootfstype=nfs \\
+  rootflags=ro \\
+  nfsroot=${PXE_SERVER_IP}:$(omarchy_nfs_ro_root),ro,vers=4.2 \\
+  ip=:::::eth0:dhcp \\
+  BOOTIF=01-\${net0/mac:hexhyp}
+initrd http://${PXE_SERVER_IP}/media/omarchy-nfs/root/boot/initramfs-rpi3b-pxe.img
+boot
 
 :shell
 shell
@@ -830,6 +979,50 @@ configure_samba_path_tui() {
     write_docker_env
 }
 
+omarchy_nfs_tui() {
+    local choice build_state
+
+    while true; do
+        if [[ "$OMARCHY_NFS_BUILD_EXPORT" == 1 ]]; then
+            build_state="ENABLED - no_root_squash"
+        else
+            build_state="DISABLED"
+        fi
+
+        choice="$(
+            whiptail \
+                --title 'Omarchy - NFS' \
+                --menu \
+                "Boot root: $(status_word omarchy_nfs_ready)\nBuild tree: $(status_word omarchy_nfs_build_ready)\nBuild export: $build_state\nRO root: $(omarchy_nfs_ro_root)\nRW home: $(omarchy_nfs_home)" \
+                23 84 8 \
+                instructions 'Show NFS build instructions' \
+                build-export 'Enable / disable temporary build export' \
+                promote 'Promote finalized build to RO root' \
+                back 'Back' \
+                3>&1 1>&2 2>&3
+        )" || return 0
+
+        case "$choice" in
+            instructions)
+                show_omarchy_nfs_instructions
+                ;;
+            build-export)
+                clear_screen
+                toggle_omarchy_nfs_build_export
+                pause
+                ;;
+            promote)
+                clear_screen
+                promote_omarchy_nfs
+                pause
+                ;;
+            back)
+                return 0
+                ;;
+        esac
+    done
+}
+
 omarchy_tui() {
     local choice
 
@@ -838,30 +1031,41 @@ omarchy_tui() {
             whiptail \
                 --title "Omarchy $OMARCHY_VERSION" \
                 --menu \
-                "Status: $(status_word omarchy_ready)\nISO verified: $(status_word omarchy_iso_verified)\nLocation: $(omarchy_root)" \
-                20 78 7 \
-                download 'Download / resume, verify, and extract' \
-                verify 'Verify existing ISO' \
-                extract 'Re-extract existing ISO' \
+                "Installer media: $(status_word omarchy_ready)\nNFS root: $(status_word omarchy_nfs_ready)\nInstaller ISO verified: $(status_word omarchy_iso_verified)" \
+                20 82 7 \
+                install-media 'Manage Omarchy installer media' \
+                nfs 'Manage Omarchy - NFS' \
                 back 'Back' \
                 3>&1 1>&2 2>&3
         )" || return 0
 
         case "$choice" in
-            download)
-                download_omarchy
-                pause
+            install-media)
+                while true; do
+                    local media_choice
+                    media_choice="$(
+                        whiptail \
+                            --title 'Omarchy - Install media' \
+                            --menu \
+                            "Status: $(status_word omarchy_ready)\nLocation: $(omarchy_root)" \
+                            19 78 6 \
+                            download 'Download / resume, verify, and extract' \
+                            verify 'Verify existing ISO' \
+                            extract 'Re-extract existing ISO' \
+                            back 'Back' \
+                            3>&1 1>&2 2>&3
+                    )" || break
+
+                    case "$media_choice" in
+                        download) download_omarchy; pause ;;
+                        verify) clear_screen; verify_omarchy; generate_boot_ipxe; pause ;;
+                        extract) clear_screen; extract_omarchy; pause ;;
+                        back) break ;;
+                    esac
+                done
                 ;;
-            verify)
-                clear_screen
-                verify_omarchy
-                generate_boot_ipxe
-                pause
-                ;;
-            extract)
-                clear_screen
-                extract_omarchy
-                pause
+            nfs)
+                omarchy_nfs_tui
                 ;;
             back)
                 return 0
@@ -1124,7 +1328,7 @@ tui() {
                 --menu \
                 "PXE server: $PXE_SERVER_IP\nDocker Compose: $compose_state" \
                 23 78 11 \
-                omarchy "Omarchy $OMARCHY_VERSION [$(status_word omarchy_ready)]" \
+                omarchy "Omarchy [Install: $(status_word omarchy_ready), NFS: $(status_word omarchy_nfs_ready)]" \
                 templeos "TempleOS [$(status_word templeos_ready)]" \
                 samba "Samba [$(samba_status_word)]" \
                 nfs "NFS [$(nfs_status_word)]" \
