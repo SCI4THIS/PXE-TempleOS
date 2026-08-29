@@ -37,6 +37,9 @@ It is not stored in the bind-mounted `nginx/www` working-data directory.
    - Detects `encrypt` versus `sd-encrypt` from `mkinitcpio` configuration.
    - Finds the installed kernel, initramfs and CPU microcode.
    - Checks whether an existing GRUB configuration matches the detected hook.
+   - Shows the detected boot loader in the main menu (`Limine`, `GRUB`, or
+     `Unknown`) with boot mode, partition table, encryption hook, and GRUB
+     encryption-argument validation details where applicable.
 
 2. **Dry Run**
    - Makes no disk changes.

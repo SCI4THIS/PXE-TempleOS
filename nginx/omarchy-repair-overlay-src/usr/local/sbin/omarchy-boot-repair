@@ -25,6 +25,8 @@ INITRAMFS_GRUB=""
 MICROCODE_GRUB=""
 OS_NAME=""
 CURRENT_GRUB_STATUS="Not checked"
+CURRENT_BOOT_LOADER="Not checked"
+CURRENT_BOOT_DETAILS="Target has not been inspected"
 PREPARED=0
 READWRITE=0
 
@@ -349,6 +351,39 @@ detect_existing_grub() {
     esac
 }
 
+detect_boot_configuration() {
+    local -a details
+    local detail
+
+    detect_existing_grub
+
+    # GRUB takes precedence because the repair intentionally leaves the old
+    # Limine files in place as a fallback.
+    if [[ -f "$ROOT/boot/grub/grub.cfg" ]]; then
+        CURRENT_BOOT_LOADER="GRUB"
+    elif [[ -f "$ROOT/boot/limine.conf" ]]; then
+        CURRENT_BOOT_LOADER="Limine"
+    else
+        CURRENT_BOOT_LOADER="Unknown"
+    fi
+
+    details=("$BOOT_MODE" "${PTTYPE:-unknown partition table}")
+    [[ "$ENCRYPT_HOOK" != "UNKNOWN" ]] && details+=("$ENCRYPT_HOOK")
+
+    if [[ "$CURRENT_BOOT_LOADER" == "GRUB" ]]; then
+        case "$CURRENT_GRUB_STATUS" in
+            *"UUID matches") details+=("encryption UUID matches") ;;
+            *"do NOT match"*) details+=("encryption arguments need attention") ;;
+            *"could not be verified") details+=("encryption arguments unverified") ;;
+        esac
+    fi
+
+    CURRENT_BOOT_DETAILS="${details[0]}"
+    for detail in "${details[@]:1}"; do
+        CURRENT_BOOT_DETAILS+=" | $detail"
+    done
+}
+
 detect_os_name() {
     OS_NAME="Unknown Linux installation"
     if [[ -f "$ROOT/etc/os-release" ]]; then
@@ -391,7 +426,7 @@ prepare_target() {
     detect_os_name
     detect_hook || true
     detect_boot_files || return 1
-    detect_existing_grub
+    detect_boot_configuration
 
     PREPARED=1
     READWRITE=0
@@ -448,6 +483,10 @@ Generated encryption arguments:
 
 Existing GRUB:
   $CURRENT_GRUB_STATUS
+
+Current boot configuration:
+  Boot loader:         $CURRENT_BOOT_LOADER
+  Details:             $CURRENT_BOOT_DETAILS
 
 Diagnostics and Dry Run mount the target read-only.
 Commit requires a second explicit confirmation and writes only after
@@ -676,6 +715,8 @@ The generated grub.cfg was NOT installed."
     chmod 0644 "$ROOT/boot/grub/grub.cfg"
     rm -f "$cfg"
 
+    detect_boot_configuration
+
     sync
     cleanup_target
 
@@ -709,6 +750,9 @@ reset_target() {
     TARGET_DISK=""
     BOOT_PART=""
     LUKS_PART=""
+    CURRENT_GRUB_STATUS="Not checked"
+    CURRENT_BOOT_LOADER="Not checked"
+    CURRENT_BOOT_DETAILS="Target has not been inspected"
     msg "Target selection and mounts were reset."
 }
 
@@ -719,16 +763,26 @@ reboot_machine() {
 }
 
 main_menu() {
-    local choice
+    local choice boot_status
 
     while true; do
+        if [[ "$CURRENT_BOOT_LOADER" != "Not checked" ]]; then
+            boot_status="Boot: $CURRENT_BOOT_LOADER
+Details: $CURRENT_BOOT_DETAILS"
+        else
+            boot_status="Boot: Not checked
+Details: Select and diagnose a target to inspect it."
+        fi
+
         choice="$(
             whiptail --title "$TITLE" --menu \
 "PXE rescue environment
 
+$boot_status
+
 Diagnostics and Dry Run are read-only.
 Commit requires explicit confirmation." \
-                22 82 10 \
+                22 76 8 \
                 diagnostics 'Run / view diagnostics' \
                 dry-run 'Generate and validate repair without writing' \
                 commit 'COMMIT GRUB legacy-BIOS repair' \
