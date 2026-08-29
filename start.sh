@@ -654,7 +654,6 @@ kernel http://${PXE_SERVER_IP}/media/omarchy/arch/boot/x86_64/vmlinuz-linux-t2 \
   archisobasedir=omarchy/arch \\
   archiso_nfs_srv=${PXE_SERVER_IP}:${EXPORT_RO} \\
   copytoram=n \\
-  cms_verify=y \\
   initramfs_async=0 \\
   ip=\${net0/ip}:${PXE_SERVER_IP}:\${net0/gateway}:\${net0/netmask} \\
   BOOTIF=01-\${net0/mac:hexhyp}
