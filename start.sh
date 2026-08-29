@@ -7,11 +7,11 @@ CONFIG_FILE="$CONFIG_HOME/config.env"
 DOCKER_ENV="$PROJECT_ROOT/.env"
 RUNTIME_HOME="$CONFIG_HOME/runtime"
 BOOT_IPXE="$RUNTIME_HOME/boot.ipxe"
-REPAIR_OVERLAY_SOURCE="$PROJECT_ROOT/nginx/omarchy-repair-overlay-src"
+REPAIR_OVERLAY_SOURCE="$PROJECT_ROOT/nginx/repair-overlay"
 REPAIR_APKOVL="$RUNTIME_HOME/omarchy-repair-apkovl.tar.gz"
 
 COMPOSE_BASE="$PROJECT_ROOT/docker-compose.yml"
-COMPOSE_LAYER="$PROJECT_ROOT/docker-compose.rpi3b-pxe.yml"
+COMPOSE_LAYER="$PROJECT_ROOT/compose.runtime.yml"
 NFS_EXPORTS_FILE="/etc/exports.d/rpi3b-pxe.exports"
 
 STATE_HOME="$CONFIG_HOME/state"
@@ -121,8 +121,8 @@ build_inputs_hash() {
                 -path "$PROJECT_ROOT/samba/shared" \
             \) -prune -o \
             -type f \
-            ! -path "$PROJECT_ROOT/nginx/runtime-start.sh" \
-            ! -path "$PROJECT_ROOT/nginx/runtime-nginx.conf" \
+            ! -path "$PROJECT_ROOT/nginx/entrypoint.sh" \
+            ! -path "$PROJECT_ROOT/nginx/nginx.conf" \
             -print0 2>/dev/null |
             sort -z |
             while IFS= read -r -d '' file; do
@@ -150,8 +150,8 @@ runtime_inputs_hash() {
         for file in \
             "$COMPOSE_BASE" \
             "$COMPOSE_LAYER" \
-            "$PROJECT_ROOT/nginx/runtime-start.sh" \
-            "$PROJECT_ROOT/nginx/runtime-nginx.conf"
+            "$PROJECT_ROOT/nginx/entrypoint.sh" \
+            "$PROJECT_ROOT/nginx/nginx.conf"
         do
             if [[ -f "$file" ]]; then
                 printf 'FILE %s\n' "${file#"$PROJECT_ROOT"/}"

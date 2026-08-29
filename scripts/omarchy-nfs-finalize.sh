@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 Usage:
-  rpi3b-pxe-omarchy-nfs-finalize.sh \
+  omarchy-nfs-finalize.sh \
     --server 192.168.1.68 \
     --home-export /mnt/ssd/exports/rw/omarchy-home
 

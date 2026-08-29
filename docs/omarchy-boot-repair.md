@@ -22,7 +22,7 @@ The PXE entry boots Alpine Linux 3.23 and requests these APKs automatically:
 - `kbd` (`openvt` / `chvt`)
 
 The APKoVL launches the TUI automatically on virtual terminal 8.
-`start.sh` generates the archive from `nginx/omarchy-repair-overlay-src` in
+`start.sh` generates the archive from `nginx/repair-overlay` in
 the per-user runtime directory and nginx serves it through an explicit alias.
 It is not stored in the bind-mounted `nginx/www` working-data directory.
 

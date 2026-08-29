@@ -101,8 +101,8 @@ if [[ -d /home ]]; then
 fi
 
 install -Dm755 \
-    "$SCRIPT_DIR/rpi3b-pxe-omarchy-nfs-finalize.sh" \
-    "$ROOT/root/rpi3b-pxe-omarchy-nfs-finalize.sh"
+    "$SCRIPT_DIR/omarchy-nfs-finalize.sh" \
+    "$ROOT/root/omarchy-nfs-finalize.sh"
 
 # Ensure DNS works in the chroot even when the source uses a runtime resolver symlink.
 cp -Lf /etc/resolv.conf "$ROOT/etc/resolv.conf"
@@ -123,7 +123,7 @@ mount --make-rslave "$ROOT/run"
 binds+=("$ROOT/run")
 
 echo "Finalizing staged NFS root..."
-chroot "$ROOT" /root/rpi3b-pxe-omarchy-nfs-finalize.sh \
+chroot "$ROOT" /root/omarchy-nfs-finalize.sh \
     --server "$SERVER" \
     --home-export "$HOME_EXPORT"
 

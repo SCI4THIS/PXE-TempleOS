@@ -2,8 +2,8 @@ services:
   http:
     volumes:
       - "${EXPORT_RO}:/var/www/htdocs/media:ro"
-      - ./nginx/runtime-start.sh:/rpi3b-pxe-start.sh:ro
-      - ./nginx/runtime-nginx.conf:/rpi3b-pxe-nginx.conf:ro
+      - ./nginx/entrypoint.sh:/rpi3b-pxe-start.sh:ro
+      - ./nginx/nginx.conf:/rpi3b-pxe-nginx.conf:ro
       - "${BOOT_RUNTIME_DIR}:/rpi3b-pxe-runtime:ro"
     command: ["/rpi3b-pxe-start.sh"]
 
