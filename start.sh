@@ -116,7 +116,6 @@ build_inputs_hash() {
             "$PROJECT_ROOT/nginx" \
             "$PROJECT_ROOT/samba" \
             \( \
-                -path "$PROJECT_ROOT/dnsmasq/tftp" -o \
                 -path "$PROJECT_ROOT/nginx/www" -o \
                 -path "$REPAIR_OVERLAY_SOURCE" -o \
                 -path "$PROJECT_ROOT/samba/shared" \

@@ -3,16 +3,17 @@ FROM alpine:3.20
 RUN apk add --no-cache dnsmasq
 
 ARG PXE_SERVER_IP
-ENV STAGING_DIR=/tmp/staging
 ENV NETWORK="${PXE_SERVER_IP%.*}.0"
 
-COPY tftp/ ${STAGING_DIR}/tftpboot/
+COPY --chmod=0644 tftp/x86_64-pcbios/ipxe.pxe /tftpboot/x86_64-pcbios/ipxe.pxe
+COPY --chmod=0644 tftp/x86_64-pcbios/undionly.kpxe /tftpboot/x86_64-pcbios/undionly.kpxe
+COPY --chmod=0644 tftp/x86_64-efi/ipxe.efi /tftpboot/x86_64-efi/ipxe.efi
 
-RUN test -s ${STAGING_DIR}/tftpboot/x86_64-pcbios/ipxe.pxe \
-    && test -s ${STAGING_DIR}/tftpboot/x86_64-pcbios/undionly.kpxe \
-    && test -s ${STAGING_DIR}/tftpboot/x86_64-efi/ipxe.efi
+RUN test -s /tftpboot/x86_64-pcbios/ipxe.pxe \
+    && test -s /tftpboot/x86_64-pcbios/undionly.kpxe \
+    && test -s /tftpboot/x86_64-efi/ipxe.efi
 
-RUN install -Dm644 /dev/stdin ${STAGING_DIR}/etc/dnsmasq.conf <<EOF
+RUN install -Dm644 /dev/stdin /etc/dnsmasq.conf <<EOF
 port=0
 interface=eth0
 
@@ -35,18 +36,10 @@ log-queries
 log-facility=-
 EOF
 
-RUN install -Dm644 /dev/stdin ${STAGING_DIR}/tftpboot/x86_64-efi/autoexec.ipxe <<EOF
+RUN install -Dm644 /dev/stdin /tftpboot/x86_64-efi/autoexec.ipxe <<EOF
 #!ipxe
 dhcp
 chain http://${PXE_SERVER_IP}/x86_64-efi/boot.ipxe
 EOF
 
-RUN install -Dm700 /dev/stdin /start.sh <<EOF
-#!/bin/sh
-echo "Copying files from staging to root"
-cp -a ${STAGING_DIR}/* /
-echo "Starting dnsmasq server"
-exec dnsmasq -k -d
-EOF
-
-CMD ["/start.sh"]
+CMD ["dnsmasq", "-k", "-d"]

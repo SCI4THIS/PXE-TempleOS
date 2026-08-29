@@ -9,8 +9,6 @@ services:
     network_mode: host
     cap_add:
       - NET_ADMIN
-    volumes:
-      - ./dnsmasq/tftp:/tftpboot
 
   http:
     build:
