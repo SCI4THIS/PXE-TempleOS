@@ -1,0 +1,3 @@
+[submodule "dnsmasq/ipxe-src"]
+	path = dnsmasq/ipxe-src
+	url = https://github.com/ipxe/ipxe.git
