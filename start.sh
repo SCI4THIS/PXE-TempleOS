@@ -9,6 +9,9 @@ BOOT_IPXE="$CONFIG_HOME/boot.ipxe"
 COMPOSE_BASE="$PROJECT_ROOT/docker-compose.yml"
 COMPOSE_LAYER="$PROJECT_ROOT/docker-compose.rpi3b-pxe.yml"
 NFS_EXPORTS_FILE="/etc/exports.d/rpi3b-pxe.exports"
+STATE_HOME="$CONFIG_HOME/state"
+BUILD_HASH_FILE="$STATE_HOME/build-inputs.sha256"
+RUNTIME_HASH_FILE="$STATE_HOME/runtime-inputs.sha256"
 
 DEFAULT_EXPORT_RO="/mnt/ssd/exports/ro"
 DEFAULT_EXPORT_RW="/mnt/ssd/exports/rw"
@@ -80,6 +83,70 @@ compose() {
     else
         "${root[@]}" docker-compose -f "$COMPOSE_BASE" -f "$COMPOSE_LAYER" "$@"
     fi
+}
+
+hash_stream() {
+    sha256sum | awk '{print $1 }'
+}
+
+build_inputs_hash() {
+    {
+      printf 'PXE_SERVER_IP=%s\n' "$PXE_SERVER_IP"
+      printf 'UID=%s\n' "$(id -u)"
+      printf 'GID=%s\n' "$(id -g)"
+      printf 'ENABLE_SAMBA=%s\n' "$ENABLE_SAMBA"
+
+      # Hash the actual Docker build contexts while excluding directories that
+      # are runtime data/bind mounts rather than image build inputs.
+      find \
+          "$PROJECT_ROOT/dnsmasq" \
+          "$PROJECT_ROOT/nginx/www/*" \
+	  "$PROJECT_ROOT/samba/shared/*" \
+	  -type f \
+	  ! -path "$PROJECT_ROOT/dnsmasq/tftp/*" \
+	  ! -path "$PROJECT_ROOT/nginx/www/*" \
+	  ! -path "$PROJECT_ROOT/samba/shared/*" \
+	  -print0 2>/dev/null |
+	  sort -z |
+	  while IFS= read -r -d '' file; do
+              printf 'FILE %s\n' "${file#"$PROJECT_ROOT"/}"
+	      sha256sum "$file"
+          done
+    } | hash_stream
+}
+
+runtime_inputs_hash() {
+    {
+        printf 'PXE_SERVER_IP=%s\n' "$PXE_SERVER_IP"
+	printf 'EXPORT_RO=%s\n' "$EXPORT_RO"
+	printf 'SAMBA_ROOT=%s\n' "$SAMBA_ROOT"
+	printf 'BOOT_IPXE=%s\n' "$BOOT_IPXE"
+	printf 'ENABLE_SAMBA=%s\n' "$ENABLE_SAMBA"
+
+	for file in \
+            "$COMPOSE_BASE" \
+	    "$COMPOSE_LAYER" \
+	    "$PROJECT_ROOT/nginx/runtime-start.sh" \
+	    "$PROJECT_ROOT/nginx/runtime-nginx.conf"
+        do
+            if [[ -f "$file" ]]; then
+                printf 'FILE %s\n' "${file#"$PROJECT_ROOT"/}"
+		sha256sum "$file"
+            fi
+        done
+    } | hash_stream
+}
+
+stored_hash() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+    cat "$file"
+}
+
+store_hash() {
+    local file="$1" value="$2"
+    mkdir -p "$STATE_HOME"
+    printf '%s\n' "$value" >"$file"
 }
 
 bootstrap_dependencies() {
@@ -589,22 +656,66 @@ Samba:        $samba" 21 78 || true
 }
 
 start_services() {
+    local current_build stored_build current_runtime stored_runtime
+    local rebuild=0 runtime_changed=0
+    local services=(dnsmasq http)
+
     ensure_directories
     write_docker_env
     nfs_configure
     generate_boot_ipxe
+    mkdir -p "$STATE_HOME"
 
     if have systemctl; then run_root systemctl enable --now docker || true; fi
 
     if [[ "$ENABLE_SAMBA" == 1 ]]; then
-        compose up -d --build dnsmasq http samba
+        services+=(samba)
     else
         compose stop samba >/dev/null 2>&1 || true
         compose rm -f samba >/dev/null 2>&1 || true
-        compose up -d --build dnsmasq http
     fi
 
+    current_build="$(build_inputs_hash)"
+    stored_build="$(stored_hash "$BUILD_HASH_FILE" 2>/dev/null || true)"
+
+    if [[ "$current_build" != "$stored_build" ]]; then
+        rebuild=1
+        log "Docker build inputs changed; rebuilding images..."
+        compose build "${services[@]}"
+    else
+        log "Docker build inputs unchanged; skipping image rebuild."
+    fi
+
+    current_runtime="$(runtime_inputs_hash)"
+    stored_runtime="$(stored_hash "$RUNTIME_HASH_FILE" 2>/dev/null || true)"
+    [[ "$current_runtime" != "$stored_runtime" ]] && runtime_changed=1
+
+    # Start/reconcile containers without forcing an image build.  If the image
+    # state was removed outside this tool, fall back to a build automatically.
+    if ! compose up -d --no-build "${services[@]}"; then
+        log "Existing images were insufficient; rebuilding and retrying..."
+        compose build "${services[@]}"
+        compose up -d --no-build "${services[@]}"
+	rebuild=1
+	current_build="$(build_inputs_hash)"
+    fi
+
+    # Bind-mounted nginx configuration changes do not cause Compose to restart
+    # an already-running container.  Restart HTTP when those runtime inputs have
+    # changed so nginx parses the new readiness/menu configuration
+    if (( runtime_changed )); then
+        log "Runtime configuration changed; restarting nginx..."
+        compose restart http
+    fi
+
+    store_hash "$BUILD_HASH_FILE" "$current_build"
+    store_hash "$RUNTIME_HASH_FILE" "$current_runtime"
+
     generate_boot_ipxe
+
+    if (( rebuild )); then
+        log "Images rebuilt."
+    fi
 }
 
 stop_services() { compose down; }
@@ -659,7 +770,7 @@ tui() {
             nfs) clear_screen; nfs_configure; run_root exportfs -v; pause ;;
             optional) optional_services_tui ;;
             backup) clear_screen; sync_backup; log "RW export synchronized to $BACKUP_DIR/rw"; pause ;;
-            start) clear_screen; start_services; compose ps; pause ;;
+            start) clear_screen; start_services; show_logs ;;
             stop) clear_screen; stop_services; pause ;;
             logs) show_logs ;;
             exit) exit 0 ;;
