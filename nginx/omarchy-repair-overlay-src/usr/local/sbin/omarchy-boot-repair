@@ -1,0 +1,789 @@
+#!/usr/bin/env bash
+set -euo pipefail
+shopt -s nullglob
+
+TITLE="Omarchy - Boot Repair"
+WORK="/mnt/omarchy-boot-repair"
+ROOT="$WORK/root"
+MAP_NAME="omarchy_repair_root"
+MAP_DEV="/dev/mapper/$MAP_NAME"
+
+TARGET_DISK=""
+BOOT_PART=""
+LUKS_PART=""
+PTTYPE=""
+BOOT_MODE=""
+BOOT_UUID=""
+LUKS_UUID=""
+ENCRYPT_HOOK=""
+CRYPT_ARGS=""
+VMLINUX=""
+INITRAMFS=""
+MICROCODE=""
+VMLINUX_GRUB=""
+INITRAMFS_GRUB=""
+MICROCODE_GRUB=""
+OS_NAME=""
+CURRENT_GRUB_STATUS="Not checked"
+PREPARED=0
+READWRITE=0
+
+msg() {
+    whiptail --title "$TITLE" --msgbox "$1" 20 78 || true
+}
+
+error_msg() {
+    whiptail --title "$TITLE - Error" --msgbox "$1" 20 78 || true
+}
+
+textbox() {
+    local heading="$1" file="$2"
+    whiptail --title "$heading" --scrolltext --textbox "$file" 28 96
+}
+
+is_mounted() {
+    local target="$1"
+    awk -v p="$target" '$2 == p {found=1} END {exit !found}' /proc/mounts
+}
+
+cleanup_target() {
+    set +e
+    cd /
+    is_mounted "$ROOT/boot" && umount "$ROOT/boot"
+    is_mounted "$ROOT" && umount "$ROOT"
+    if cryptsetup status "$MAP_NAME" >/dev/null 2>&1; then
+        cryptsetup close "$MAP_NAME"
+    fi
+    rm -rf "$WORK"
+    PREPARED=0
+    READWRITE=0
+    set -e
+}
+
+trap cleanup_target EXIT INT TERM
+
+disk_description() {
+    local disk="$1" size model pttype
+    size="$(lsblk -dn -o SIZE "$disk" 2>/dev/null | xargs)"
+    model="$(lsblk -dn -o MODEL "$disk" 2>/dev/null | xargs)"
+    pttype="$(lsblk -dn -o PTTYPE "$disk" 2>/dev/null | xargs)"
+    printf '%s %s [%s]' "${size:-?}" "${model:-disk}" "${pttype:-unknown}"
+}
+
+select_disk() {
+    local -a disks menu
+    local disk choice
+
+    mapfile -t disks < <(
+        lsblk -dpno NAME,TYPE 2>/dev/null |
+        awk '$2 == "disk" {print $1}'
+    )
+
+    if ((${#disks[@]} == 0)); then
+        error_msg "No local disks were found."
+        return 1
+    fi
+
+    if ((${#disks[@]} == 1)); then
+        TARGET_DISK="${disks[0]}"
+        return 0
+    fi
+
+    menu=()
+    for disk in "${disks[@]}"; do
+        menu+=("$disk" "$(disk_description "$disk")")
+    done
+
+    choice="$(
+        whiptail --title "$TITLE" --menu \
+            "Select the disk containing the Omarchy installation." \
+            20 88 10 "${menu[@]}" \
+            3>&1 1>&2 2>&3
+    )" || return 1
+
+    TARGET_DISK="$choice"
+}
+
+select_partition_from_candidates() {
+    local prompt="$1" result_var="$2"
+    shift 2
+    local -a candidates=("$@") menu
+    local p fstype size choice
+
+    if ((${#candidates[@]} == 0)); then
+        return 1
+    fi
+
+    if ((${#candidates[@]} == 1)); then
+        printf -v "$result_var" '%s' "${candidates[0]}"
+        return 0
+    fi
+
+    menu=()
+    for p in "${candidates[@]}"; do
+        fstype="$(blkid -s TYPE -o value "$p" 2>/dev/null || true)"
+        size="$(lsblk -dn -o SIZE "$p" 2>/dev/null | xargs)"
+        menu+=("$p" "${size:-?} ${fstype:-unknown}")
+    done
+
+    choice="$(
+        whiptail --title "$TITLE" --menu "$prompt" \
+            20 88 10 "${menu[@]}" \
+            3>&1 1>&2 2>&3
+    )" || return 1
+
+    printf -v "$result_var" '%s' "$choice"
+}
+
+detect_partitions() {
+    local -a parts luks_candidates boot_candidates
+    local p fstype
+
+    mapfile -t parts < <(
+        lsblk -nrpo NAME,TYPE "$TARGET_DISK" |
+        awk '$2 == "part" {print $1}'
+    )
+
+    for p in "${parts[@]}"; do
+        fstype="$(blkid -s TYPE -o value "$p" 2>/dev/null || true)"
+        case "$fstype" in
+            crypto_LUKS) luks_candidates+=("$p") ;;
+            vfat|fat|fat32) boot_candidates+=("$p") ;;
+        esac
+    done
+
+    select_partition_from_candidates \
+        "Select the LUKS partition containing Omarchy." \
+        LUKS_PART "${luks_candidates[@]}" || {
+            error_msg "No crypto_LUKS partition was found on $TARGET_DISK."
+            return 1
+        }
+
+    select_partition_from_candidates \
+        "Select the FAT boot partition containing Omarchy /boot." \
+        BOOT_PART "${boot_candidates[@]}" || {
+            error_msg "No FAT boot partition was found on $TARGET_DISK."
+            return 1
+        }
+}
+
+unlock_root() {
+    local pass
+
+    if cryptsetup status "$MAP_NAME" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    pass="$(
+        whiptail --title "$TITLE" --passwordbox \
+            "Enter the LUKS passphrase for $LUKS_PART.\n\nThe passphrase is used only for this rescue session." \
+            13 78 \
+            3>&1 1>&2 2>&3
+    )" || return 1
+
+    if ! printf '%s' "$pass" |
+        cryptsetup open --type luks --key-file=- "$LUKS_PART" "$MAP_NAME"; then
+        unset pass
+        error_msg "Unable to unlock $LUKS_PART."
+        return 1
+    fi
+    unset pass
+}
+
+mount_readonly() {
+    mkdir -p "$ROOT"
+
+    if ! mount -t btrfs -o ro,subvol=@ "$MAP_DEV" "$ROOT"; then
+        error_msg \
+"Unable to mount the Btrfs @ subvolume.
+
+This repair tool currently expects the standard Omarchy Btrfs root subvolume named @."
+        return 1
+    fi
+
+    mkdir -p "$ROOT/boot"
+    if ! mount -o ro "$BOOT_PART" "$ROOT/boot"; then
+        umount "$ROOT" || true
+        error_msg "Unable to mount $BOOT_PART at $ROOT/boot."
+        return 1
+    fi
+}
+
+detect_hook() {
+    local -a configs
+    local hooks=""
+
+    configs=("$ROOT/etc/mkinitcpio.conf")
+    configs+=("$ROOT"/etc/mkinitcpio.conf.d/*.conf)
+
+    for cfg in "${configs[@]}"; do
+        [[ -f "$cfg" ]] || continue
+        hooks+="$(grep '^HOOKS=' "$cfg" 2>/dev/null || true)"$'\n'
+    done
+
+    # Check sd-encrypt first. This distinction is the key part of the repair.
+    if grep -qw 'sd-encrypt' <<<"$hooks"; then
+        ENCRYPT_HOOK="sd-encrypt"
+        CRYPT_ARGS="rd.luks.name=${LUKS_UUID}=root root=/dev/mapper/root"
+    elif grep -qw 'encrypt' <<<"$hooks"; then
+        ENCRYPT_HOOK="encrypt"
+        CRYPT_ARGS="cryptdevice=UUID=${LUKS_UUID}:root root=/dev/mapper/root"
+    else
+        ENCRYPT_HOOK="UNKNOWN"
+        CRYPT_ARGS=""
+        return 1
+    fi
+}
+
+select_file() {
+    local prompt="$1" result_var="$2"
+    shift 2
+    local -a files=("$@") menu
+    local f choice
+
+    if ((${#files[@]} == 0)); then
+        return 1
+    fi
+
+    if ((${#files[@]} == 1)); then
+        printf -v "$result_var" '%s' "${files[0]}"
+        return 0
+    fi
+
+    menu=()
+    for f in "${files[@]}"; do
+        menu+=("$f" "")
+    done
+
+    choice="$(
+        whiptail --title "$TITLE" --menu "$prompt" \
+            22 96 12 "${menu[@]}" \
+            3>&1 1>&2 2>&3
+    )" || return 1
+
+    printf -v "$result_var" '%s' "$choice"
+}
+
+detect_boot_files() {
+    local -a kernels initramfses
+    local f kernel_dir vendor
+
+    for f in \
+        "$ROOT"/boot/*/linux/vmlinuz \
+        "$ROOT"/boot/vmlinuz \
+        "$ROOT"/boot/vmlinuz-*
+    do
+        [[ -f "$f" || -L "$f" ]] && kernels+=("$f")
+    done
+
+    select_file "Select the Omarchy kernel to boot." VMLINUX "${kernels[@]}" || {
+        error_msg "No kernel was found beneath $ROOT/boot."
+        return 1
+    }
+
+    kernel_dir="$(dirname "$VMLINUX")"
+    if [[ -f "$kernel_dir/initramfs" || -L "$kernel_dir/initramfs" ]]; then
+        INITRAMFS="$kernel_dir/initramfs"
+    else
+        for f in \
+            "$kernel_dir"/initramfs* \
+            "$ROOT"/boot/*/linux/initramfs \
+            "$ROOT"/boot/initramfs-*.img
+        do
+            [[ -f "$f" || -L "$f" ]] && initramfses+=("$f")
+        done
+
+        select_file "Select the initramfs matching the kernel." \
+            INITRAMFS "${initramfses[@]}" || {
+                error_msg "No initramfs was found beneath $ROOT/boot."
+                return 1
+            }
+    fi
+
+    vendor="$(awk -F: '/vendor_id/{gsub(/[[:space:]]/,"",$2); print $2; exit}' /proc/cpuinfo)"
+    MICROCODE=""
+    case "$vendor" in
+        AuthenticAMD)
+            [[ -f "$ROOT/boot/amd-ucode.img" ]] &&
+                MICROCODE="$ROOT/boot/amd-ucode.img"
+            ;;
+        GenuineIntel)
+            [[ -f "$ROOT/boot/intel-ucode.img" ]] &&
+                MICROCODE="$ROOT/boot/intel-ucode.img"
+            ;;
+    esac
+
+    VMLINUX_GRUB="${VMLINUX#"$ROOT/boot"}"
+    INITRAMFS_GRUB="${INITRAMFS#"$ROOT/boot"}"
+    MICROCODE_GRUB=""
+    [[ -n "$MICROCODE" ]] &&
+        MICROCODE_GRUB="${MICROCODE#"$ROOT/boot"}"
+}
+
+detect_existing_grub() {
+    local cfg="$ROOT/boot/grub/grub.cfg"
+
+    if [[ ! -f "$cfg" ]]; then
+        CURRENT_GRUB_STATUS="Not installed/configured"
+        return 0
+    fi
+
+    case "$ENCRYPT_HOOK" in
+        sd-encrypt)
+            if grep -Fq "rd.luks.name=${LUKS_UUID}=root" "$cfg"; then
+                CURRENT_GRUB_STATUS="Present; sd-encrypt UUID matches"
+            else
+                CURRENT_GRUB_STATUS="Present; encryption arguments do NOT match detected sd-encrypt setup"
+            fi
+            ;;
+        encrypt)
+            if grep -Fq "cryptdevice=UUID=${LUKS_UUID}:root" "$cfg"; then
+                CURRENT_GRUB_STATUS="Present; encrypt UUID matches"
+            else
+                CURRENT_GRUB_STATUS="Present; encryption arguments do NOT match detected encrypt setup"
+            fi
+            ;;
+        *)
+            CURRENT_GRUB_STATUS="Present; encryption hook could not be verified"
+            ;;
+    esac
+}
+
+detect_os_name() {
+    OS_NAME="Unknown Linux installation"
+    if [[ -f "$ROOT/etc/os-release" ]]; then
+        OS_NAME="$(
+            (
+                # shellcheck disable=SC1091
+                source "$ROOT/etc/os-release"
+                printf '%s' "${PRETTY_NAME:-${NAME:-Unknown Linux installation}}"
+            )
+        )"
+    fi
+}
+
+prepare_target() {
+    (( PREPARED )) && return 0
+
+    cleanup_target
+    mkdir -p "$WORK"
+
+    BOOT_MODE="Legacy BIOS"
+    [[ -d /sys/firmware/efi ]] && BOOT_MODE="UEFI"
+
+    select_disk || return 1
+    PTTYPE="$(lsblk -dn -o PTTYPE "$TARGET_DISK" 2>/dev/null | xargs)"
+    [[ -n "$PTTYPE" ]] || PTTYPE="unknown"
+
+    detect_partitions || return 1
+
+    BOOT_UUID="$(blkid -s UUID -o value "$BOOT_PART" 2>/dev/null || true)"
+    LUKS_UUID="$(blkid -s UUID -o value "$LUKS_PART" 2>/dev/null || true)"
+
+    [[ -n "$BOOT_UUID" && -n "$LUKS_UUID" ]] || {
+        error_msg "Unable to read the boot or LUKS UUID."
+        return 1
+    }
+
+    unlock_root || return 1
+    mount_readonly || return 1
+
+    detect_os_name
+    detect_hook || true
+    detect_boot_files || return 1
+    detect_existing_grub
+
+    PREPARED=1
+    READWRITE=0
+}
+
+diagnostic_report() {
+    local eligibility="YES"
+    local report
+    report="$(mktemp)"
+
+    [[ "$BOOT_MODE" == "Legacy BIOS" ]] ||
+        eligibility="NO - this repair action targets legacy BIOS"
+    [[ "$PTTYPE" == "dos" ]] ||
+        eligibility="NO - automatic Commit currently supports MBR/dos disks only"
+    [[ "$ENCRYPT_HOOK" != "UNKNOWN" ]] ||
+        eligibility="NO - mkinitcpio encryption hook was not detected"
+
+    cat >"$report" <<EOF
+Omarchy Boot Repair diagnostics
+
+Operating system:
+  $OS_NAME
+
+Boot environment:
+  Current boot mode:  $BOOT_MODE
+  Target disk:        $TARGET_DISK
+  Partition table:    $PTTYPE
+  Commit supported:   $eligibility
+
+Boot partition:
+  Device:             $BOOT_PART
+  Filesystem UUID:    $BOOT_UUID
+
+Encrypted root:
+  Device:             $LUKS_PART
+  LUKS UUID:          $LUKS_UUID
+  Mapper:             $MAP_DEV
+  Btrfs subvolume:    @
+
+Initramfs:
+  Encryption hook:    $ENCRYPT_HOOK
+
+Kernel:
+  $VMLINUX_GRUB
+
+Initramfs:
+  $INITRAMFS_GRUB
+
+Microcode:
+  ${MICROCODE_GRUB:-none detected}
+
+Generated encryption arguments:
+  ${CRYPT_ARGS:-UNAVAILABLE}
+
+Existing GRUB:
+  $CURRENT_GRUB_STATUS
+
+Diagnostics and Dry Run mount the target read-only.
+Commit requires a second explicit confirmation and writes only after
+the generated GRUB configuration passes grub-script-check.
+EOF
+
+    textbox "$TITLE - Diagnostics" "$report" || true
+    rm -f "$report"
+}
+
+write_proposed_grub() {
+    local output="$1"
+    local part_module initrd_line
+
+    case "$PTTYPE" in
+        dos) part_module="part_msdos" ;;
+        gpt) part_module="part_gpt" ;;
+        *) part_module="part_msdos" ;;
+    esac
+
+    if [[ -n "$MICROCODE_GRUB" ]]; then
+        initrd_line="    initrd ${MICROCODE_GRUB} ${INITRAMFS_GRUB}"
+    else
+        initrd_line="    initrd ${INITRAMFS_GRUB}"
+    fi
+
+    cat >"$output" <<EOF
+set timeout=10
+set default=0
+
+menuentry 'Omarchy' {
+    insmod ${part_module}
+    insmod fat
+
+    search --no-floppy --fs-uuid --set=root ${BOOT_UUID}
+
+    linux ${VMLINUX_GRUB} ${CRYPT_ARGS} rootfstype=btrfs rootflags=subvol=@ rw
+
+${initrd_line}
+}
+EOF
+}
+
+dry_run() {
+    local report cfg
+
+    prepare_target || return 0
+
+    if [[ "$ENCRYPT_HOOK" == "UNKNOWN" ]]; then
+        error_msg \
+"Dry Run cannot generate a safe menu because neither encrypt nor sd-encrypt was detected in mkinitcpio HOOKS."
+        return 0
+    fi
+
+    report="$(mktemp)"
+    cfg="$(mktemp)"
+    write_proposed_grub "$cfg"
+
+    {
+        cat <<EOF
+DRY RUN - NO DISK CHANGES WILL BE MADE
+
+Would run:
+  grub-install --target=i386-pc --boot-directory=$ROOT/boot --recheck $TARGET_DISK
+
+Would write:
+  $ROOT/boot/grub/grub.cfg
+
+Detected hook:
+  $ENCRYPT_HOOK
+
+Generated grub.cfg:
+------------------------------------------------------------
+EOF
+        cat "$cfg"
+        cat <<'EOF'
+------------------------------------------------------------
+
+Dry Run only unlocked LUKS and mounted the target filesystems read-only.
+EOF
+    } >"$report"
+
+    if command -v grub-script-check >/dev/null 2>&1; then
+        if grub-script-check "$cfg" >/dev/null 2>&1; then
+            printf '\nSyntax check: PASS\n' >>"$report"
+        else
+            printf '\nSyntax check: FAIL\n' >>"$report"
+        fi
+    fi
+
+    textbox "$TITLE - Dry Run" "$report" || true
+    rm -f "$report" "$cfg"
+}
+
+remount_readwrite() {
+    if (( READWRITE )); then
+        return 0
+    fi
+
+    umount "$ROOT/boot"
+    umount "$ROOT"
+
+    mount -t btrfs -o subvol=@ "$MAP_DEV" "$ROOT"
+    mkdir -p "$ROOT/boot"
+    mount "$BOOT_PART" "$ROOT/boot"
+
+    READWRITE=1
+}
+
+commit_repair() {
+    local typed cfg backup_dir stamp
+
+    prepare_target || return 0
+
+    if [[ "$BOOT_MODE" != "Legacy BIOS" ]]; then
+        error_msg \
+"This automatic repair is intentionally limited to legacy BIOS systems.
+
+Detected boot mode: $BOOT_MODE
+
+No changes were made."
+        return 0
+    fi
+
+    if [[ "$PTTYPE" != "dos" ]]; then
+        error_msg \
+"This automatic repair currently supports only MBR/dos partition tables.
+
+Detected: $PTTYPE
+
+GPT legacy-BIOS systems require a BIOS Boot Partition and should be handled separately.
+
+No changes were made."
+        return 0
+    fi
+
+    if [[ "$ENCRYPT_HOOK" == "UNKNOWN" ]]; then
+        error_msg \
+"Neither encrypt nor sd-encrypt could be detected in mkinitcpio HOOKS.
+
+No changes were made."
+        return 0
+    fi
+
+    cfg="$(mktemp)"
+    write_proposed_grub "$cfg"
+
+    if ! grub-script-check "$cfg"; then
+        rm -f "$cfg"
+        error_msg "Generated grub.cfg failed grub-script-check. No changes were made."
+        return 0
+    fi
+
+    if ! whiptail --title "$TITLE - Commit" --yesno \
+"Commit will:
+
+  * back up the first 1 MiB of $TARGET_DISK
+  * back up the partition table and existing boot config
+  * install GRUB i386-pc BIOS stages to $TARGET_DISK
+  * write a generated grub.cfg using the detected $ENCRYPT_HOOK hook
+  * use UUIDs read directly from the disk
+
+Limine files are left in /boot.
+
+Proceed to the final confirmation?" \
+        22 82; then
+        rm -f "$cfg"
+        return 0
+    fi
+
+    typed="$(
+        whiptail --title "$TITLE - FINAL CONFIRMATION" --inputbox \
+            "Type REPAIR to modify $TARGET_DISK." \
+            10 70 \
+            3>&1 1>&2 2>&3
+    )" || {
+        rm -f "$cfg"
+        return 0
+    }
+
+    if [[ "$typed" != "REPAIR" ]]; then
+        rm -f "$cfg"
+        msg "Confirmation did not match REPAIR. No changes were made."
+        return 0
+    fi
+
+    remount_readwrite
+
+    stamp="$(date +%Y%m%d-%H%M%S)"
+    backup_dir="$ROOT/boot/rpi3b-pxe-boot-repair-backup/$stamp"
+    mkdir -p "$backup_dir"
+
+    # Captures MBR + Limine stage-2 area on the tested MBR layout.
+    dd if="$TARGET_DISK" of="$backup_dir/disk-first-1MiB.bin" \
+        bs=1M count=1 2>/dev/null
+
+    if command -v sfdisk >/dev/null 2>&1; then
+        sfdisk -d "$TARGET_DISK" >"$backup_dir/partition-table.sfdisk" 2>/dev/null || true
+    fi
+
+    [[ -f "$ROOT/boot/limine.conf" ]] &&
+        cp -a "$ROOT/boot/limine.conf" "$backup_dir/limine.conf"
+
+    [[ -f "$ROOT/boot/grub/grub.cfg" ]] &&
+        cp -a "$ROOT/boot/grub/grub.cfg" "$backup_dir/grub.cfg"
+
+    mkdir -p "$ROOT/boot/grub"
+
+    if ! grub-install \
+        --target=i386-pc \
+        --boot-directory="$ROOT/boot" \
+        --recheck \
+        "$TARGET_DISK"; then
+        rm -f "$cfg"
+        error_msg \
+"grub-install failed.
+
+Backups are in:
+$backup_dir
+
+The generated grub.cfg was NOT installed."
+        return 0
+    fi
+
+    cp "$cfg" "$ROOT/boot/grub/grub.cfg"
+    chmod 0644 "$ROOT/boot/grub/grub.cfg"
+    rm -f "$cfg"
+
+    sync
+    cleanup_target
+
+    msg \
+"GRUB boot repair committed successfully.
+
+The disk was unmounted and the LUKS mapping was closed.
+
+A backup of the pre-repair boot information was saved beneath:
+/boot/rpi3b-pxe-boot-repair-backup/
+
+Choose Reboot to test the repaired Omarchy installation."
+}
+
+open_shell() {
+    printf '\033[2J\033[H'
+    cat <<EOF
+Omarchy Boot Repair shell
+
+Target disk: ${TARGET_DISK:-not selected}
+Prepared:    $PREPARED
+Root mount:  $ROOT
+
+Type 'exit' to return to the repair TUI.
+EOF
+    /bin/bash
+}
+
+reset_target() {
+    cleanup_target
+    TARGET_DISK=""
+    BOOT_PART=""
+    LUKS_PART=""
+    msg "Target selection and mounts were reset."
+}
+
+reboot_machine() {
+    cleanup_target
+    sync
+    reboot
+}
+
+main_menu() {
+    local choice
+
+    while true; do
+        choice="$(
+            whiptail --title "$TITLE" --menu \
+"PXE rescue environment
+
+Diagnostics and Dry Run are read-only.
+Commit requires explicit confirmation." \
+                22 82 10 \
+                diagnostics 'Run / view diagnostics' \
+                dry-run 'Generate and validate repair without writing' \
+                commit 'COMMIT GRUB legacy-BIOS repair' \
+                reset 'Select a different target disk' \
+                shell 'Open Alpine rescue shell' \
+                reboot 'Unmount, close LUKS, and reboot' \
+                exit 'Exit TUI to Alpine console' \
+                3>&1 1>&2 2>&3
+        )" || choice="exit"
+
+        case "$choice" in
+            diagnostics)
+                if prepare_target; then
+                    diagnostic_report
+                fi
+                ;;
+            dry-run)
+                dry_run
+                ;;
+            commit)
+                commit_repair
+                ;;
+            reset)
+                reset_target
+                ;;
+            shell)
+                open_shell
+                ;;
+            reboot)
+                reboot_machine
+                ;;
+            exit)
+                cleanup_target
+                return 0
+                ;;
+        esac
+    done
+}
+
+main() {
+    msg \
+"This environment diagnoses and repairs Omarchy installations that completed successfully but cannot boot through Limine on legacy-BIOS hardware.
+
+It can replace Limine's BIOS boot path with GRUB while leaving the Omarchy installation and Limine files intact.
+
+The first diagnostics pass is read-only."
+
+    if prepare_target; then
+        diagnostic_report
+    fi
+
+    main_menu
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+    command -v chvt >/dev/null 2>&1 && chvt 1 || true
+fi

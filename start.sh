@@ -732,6 +732,7 @@ __MENU__
 iseq \${templeos_ready} 1 && item --key t templeos Temple OS (Alpine Linux + QEMU) ||
 iseq \${omarchy_install_ready} 1 && item --key o omarchy-install Omarchy - Install ||
 iseq \${omarchy_nfs_ready} 1 && item --key n omarchy-nfs Omarchy - NFS ||
+item --key r omarchy-repair Omarchy - Boot Repair
 iseq \${tinycore_ready} 1 && item --key c tinycore Tiny Core Linux ||
 item --key s shell iPXE shell
 
@@ -810,6 +811,20 @@ kernel http://${PXE_SERVER_IP}/media/omarchy-nfs/root/boot/vmlinuz-rpi3b-pxe \\
   ip=:::::eth0:dhcp \\
   BOOTIF=01-\${net0/mac:hexhyp}
 initrd http://${PXE_SERVER_IP}/media/omarchy-nfs/root/boot/initramfs-rpi3b-pxe.img
+boot
+
+
+:omarchy-repair
+echo Booting Omarchy Boot Repair...
+kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/vmlinuz-lts \
+  modules=loop,squashfs,btrfs,dm-crypt quiet nomodeset \
+  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \
+  apkovl=http://${PXE_SERVER_IP}/rpi3b-pxe-extra/omarchy-repair-apkovl.tar.gz \
+  modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/modloop-lts \
+  pkgs=bash,newt,cryptsetup,btrfs-progs,grub-bios,lsblk,blkid,findmnt,mount,umount,sfdisk,kbd \
+  ntp=pool.ntp.org \
+  ip=dhcp
+initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86_64/netboot-3.23.3/initramfs-lts
 boot
 
 :shell

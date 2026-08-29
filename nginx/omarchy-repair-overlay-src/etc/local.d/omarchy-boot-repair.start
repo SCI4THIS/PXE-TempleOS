@@ -1,0 +1,17 @@
+#!/bin/sh
+# Alpine netboot installs the requested APKs before the default runlevel.
+# Start the interactive repair UI on a dedicated VT so it doesn't race tty1's getty.
+for _i in $(seq 1 30); do
+    if command -v whiptail >/dev/null 2>&1 &&
+       command -v cryptsetup >/dev/null 2>&1 &&
+       command -v grub-install >/dev/null 2>&1 &&
+       command -v openvt >/dev/null 2>&1; then
+        /usr/bin/openvt -c 8 -f -s -- /usr/local/sbin/omarchy-boot-repair
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "Omarchy Boot Repair: required packages did not become available." >&2
+echo "Run /usr/local/sbin/omarchy-boot-repair manually after fixing APK installation." >&2
+exit 1
