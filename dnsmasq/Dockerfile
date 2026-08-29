@@ -16,7 +16,7 @@ dhcp-host=00:21:70:f3:ed:f0,set:problemnic
 
 
 dhcp-boot=tag:!problemnic,tag:!ipxe,x86_64-pcbios/undionly.kpxe,,${PXE_SERVER_IP}
-dhcp-boot=tag:problemnic,tag:!ipxe,ipxe-legacy.pxe,,${PXE_SERVER_IP}
+dhcp-boot=tag:problemnic,tag:!ipxe,x86_64-pcbios/undionly.kpxe,,${PXE_SERVER_IP}
 dhcp-boot=tag:ipxe,x86_64-efi/autoexec.ipxe,,${PXE_SERVER_IP}
 
 pxe-service=X86-64_EFI,"UEFI PXE Boot",x86_64-efi/ipxe.efi
