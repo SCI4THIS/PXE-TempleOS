@@ -16,6 +16,28 @@ file to get the IP address and UID/GID correctly.
 Dnsmasq container creates a TFTP system and uses the binaries at https://boot.ipxe.org to switch 
 over to using a HTTP server (nginx) as quickly as possible.
 
+The iPXE binaries are generated from the pinned `dnsmasq/ipxe-src` submodule
+and committed to the repository so the Raspberry Pi does not need an x86
+cross-compiler. Build or refresh them on a typical x86-64 development system
+with `make`, GCC, binutils, Perl, and Python 3 installed:
+
+```bash
+./scripts/build-ipxe-artifacts.sh
+```
+
+The source and output locations are configurable, allowing the same utility to
+run on a future PXE worker with shared network storage:
+
+```bash
+./scripts/build-ipxe-artifacts.sh \
+  --source /cluster/src/ipxe \
+  --output /cluster/artifacts/tftp
+```
+
+Review and commit the generated files under `dnsmasq/tftp/`, including
+`ipxe-build.txt`, after each intentional submodule update. The build uses a
+temporary source copy and does not dirty the submodule.
+
 ### Samba
 
 Samba container creates a shared network driver which some of the netboot options can automount.
@@ -110,4 +132,3 @@ ESC - custom boot options
 F12 - netboot
 Select TempleOS (Alpine Linux + QEMU) <ENTER>
 ```
-

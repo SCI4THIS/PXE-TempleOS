@@ -1,0 +1,5 @@
+source=https://github.com/ipxe/ipxe.git
+revision=26f46a2b4f047bc0732a29c805ac798ef01204c4
+sha256=7ac4332e6deb74961a8365162a5826b0746358c5bdbb1eae92a795cfb7d57714  x86_64-pcbios/ipxe.pxe
+sha256=a77a6135f24c21512000582b3cfd655e2cca192c2cb8b150e698dac2f5f4d839  x86_64-pcbios/undionly.kpxe
+sha256=385193f232b61209c2d22057a6ba262df5ba3a83eaccfa0f0c2c6ffaaf308b3f  x86_64-efi/ipxe.efi
