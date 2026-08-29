@@ -745,6 +745,12 @@ generate_boot_ipxe() {
     {
         cat <<__MENU__
 #!ipxe
+# Long mode is CPUID extended feature bit 29. Firmware architecture alone is
+# insufficient: legacy BIOS PXE can run on either 32-bit or 64-bit CPUs.
+set cpu64 0
+set default_target alpine-x86
+cpuid --ext 29 && set cpu64 1 && set default_target alpine ||
+
 # Probe readiness endpoints on every PXE boot. nginx checks actual server files.
 set templeos_ready 0
 imgfetch --name templeos-ready http://${PXE_SERVER_IP}/ready/templeos && set templeos_ready 1 ||
@@ -763,28 +769,40 @@ imgfetch --name tinycore-ready http://${PXE_SERVER_IP}/ready/tinycore && set tin
 imgfree tinycore-ready ||
 
 menu RPI3B+PXE Network Boot Menu
-item --key a alpine Alpine Linux
+iseq \${cpu64} 1 && item --key a alpine Alpine Linux (x86_64) ||
+iseq \${cpu64} 0 && item --key a alpine-x86 Alpine Linux (x86 32-bit) ||
 __MENU__
 
         if [[ "$ENABLE_SAMBA" == 1 ]]; then
-            echo 'item --key d alpine-dev Alpine Linux - Development'
+            echo 'iseq ${cpu64} 1 && item --key d alpine-dev Alpine Linux - Development ||'
         fi
 
         cat <<__MENU__
-iseq \${templeos_ready} 1 && item --key t templeos Temple OS (Alpine Linux + QEMU) ||
-iseq \${omarchy_install_ready} 1 && item --key o omarchy-install Omarchy - Install ||
-iseq \${omarchy_nfs_ready} 1 && item --key n omarchy-nfs Omarchy - NFS ||
-item --key r omarchy-repair Omarchy - Boot Repair
-iseq \${tinycore_ready} 1 && item --key c tinycore Tiny Core Linux ||
+iseq \${cpu64} 1 && iseq \${templeos_ready} 1 && item --key t templeos Temple OS (Alpine Linux + QEMU) ||
+iseq \${cpu64} 1 && iseq \${omarchy_install_ready} 1 && item --key o omarchy-install Omarchy - Install ||
+iseq \${cpu64} 1 && iseq \${omarchy_nfs_ready} 1 && item --key n omarchy-nfs Omarchy - NFS ||
+iseq \${cpu64} 1 && item --key r omarchy-repair Omarchy - Boot Repair ||
+iseq \${cpu64} 1 && iseq \${tinycore_ready} 1 && item --key c tinycore Tiny Core Linux ||
 item --key s shell iPXE shell
 
-choose --default alpine target || goto alpine
+choose --default \${default_target} target || goto \${default_target}
 goto \${target}
 
 :tinycore
 echo Booting TinyCore...
 kernel http://${PXE_SERVER_IP}/tinycore/vmlinuz
 initrd http://${PXE_SERVER_IP}/tinycore/corepure64.gz
+boot
+
+:alpine-x86
+echo Booting Alpine x86 (32-bit)...
+kernel http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86/netboot-3.23.3/vmlinuz-lts \\
+  modules=loop,squashfs quiet nomodeset \\
+  alpine_repo=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/main,http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/alpine/v3.23/community \\
+  modloop=http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86/netboot-3.23.3/modloop-lts \\
+  ntp=pool.ntp.org \\
+  ip=dhcp
+initrd http://${PXE_SERVER_IP}/dl-cdn.alpinelinux.org/v3.23/releases/x86/netboot-3.23.3/initramfs-lts
 boot
 
 :alpine
